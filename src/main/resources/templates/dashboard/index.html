@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"><title>Dashboard — CyberSec</title>
+  <link rel="stylesheet" th:href="@{/css/main.css}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<nav class="sidebar" th:fragment="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span class="brand-text">CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item active"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item"><a href="/tip">🌐 Threat Intel</a></li>
+    <li class="nav-item"><a href="/network">📡 Network</a></li>
+    <li class="nav-item"><a href="/investigate">🔎 Investigate</a></li>
+    <li class="nav-item"><a href="/ransomware">🛡 Ransomware</a></li>
+    <li class="nav-item"><a href="/phishing">🎣 Phishing Lab</a></li>
+    <li class="nav-item"><a href="/wifi">📡 Wi-Fi Analysis</a></li>
+    <li class="nav-item"><a href="/policy">⚖️ Policy Engine</a></li>
+    <li class="nav-item"><a href="/blockchain">⛓️ Integrity Ledger</a></li>
+    <li class="nav-item"><a href="/swagger-ui.html" target="_blank">📖 API Docs</a></li>
+  </ul>
+  <div class="sidebar-footer">
+    <span th:text="${#authentication.name}">user</span>
+    <a href="/logout" class="logout-btn">Sign out</a>
+  </div>
+</nav>
+<main class="main-content">
+  <header class="page-header">
+    <h1>Security Dashboard</h1>
+    <div class="header-meta">
+      <span id="live-status" class="status-dot connecting">● Connecting...</span>
+<span th:if="${telegramEnabled}" style="font-size:12px; color:var(--success);">📱 Telegram active</span>
+      <span th:text="${#temporals.format(#temporals.createNow(),'dd MMM yyyy HH:mm')}"></span>
+    </div>
+  </header>
+
+  <section class="metrics-grid">
+    <div class="metric-card danger"><div class="metric-label">Alerts Today</div><div class="metric-value" id="m-alerts" th:text="${alertsToday}">0</div></div>
+    <div class="metric-card warning"><div class="metric-label">WAF Blocks (24h)</div><div class="metric-value" th:text="${wafBlocks24h}">0</div></div>
+    <div class="metric-card info"><div class="metric-label">IOC Indicators</div><div class="metric-value" th:text="${iocCount}">0</div></div>
+    <div class="metric-card success"><div class="metric-label">Packets Today</div><div class="metric-value" th:text="${packetsToday}">0</div></div>
+    <div class="metric-card" style="border-left:3px solid var(--purple,#7f77dd)"><div class="metric-label">Investigations</div><div class="metric-value" th:text="${investigations}">0</div></div>
+    <div class="metric-card" style="border-left:3px solid var(--text2)"><div class="metric-label">Traffic Today</div><div class="metric-value" th:text="${trafficToday}">0</div></div>
+  </section>
+
+  <section class="charts-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+    <div class="chart-card"><h3>Alert types (7 days)</h3><canvas id="typeChart" height="200"></canvas></div>
+    <div class="chart-card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3>Live Network Traffic Pulse</h3>
+        <span class="badge badge-online" style="font-size: 9px; animation: pulse 2s infinite;">LIVE MONITOR</span>
+      </div>
+      <canvas id="trafficPulseChart" height="200"></canvas>
+    </div>
+    <div class="chart-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+      <h3 style="margin-bottom: 20px;">System Risk Level</h3>
+      <div style="position: relative; width: 180px; height: 180px;">
+        <canvas id="riskGauge" width="180" height="180"></canvas>
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+          <span id="riskValue" style="font-size: 24px; font-weight: 800; color: #10b981;">SECURE</span>
+          <div style="font-size: 10px; color: #64748b; margin-top: -5px;">STABLE</div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <section class="card" style="margin-bottom: 20px;">
+    <div class="card-header">
+      <h3>Global Threat Intelligence Map</h3>
+      <span class="badge badge-online">LIVE GEOLOCATION ACTIVE</span>
+    </div>
+    <div id="worldMap" style="height: 350px; border-radius: 8px; background: #0a0a0f;"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-header"><h3>Live alert feed</h3><span class="badge badge-danger" id="alert-badge">0 new</span></div>
+    <table class="data-table">
+      <thead><tr><th>Time</th><th>Source IP</th><th>Type</th><th>Severity</th><th>Score</th><th>Module</th><th>Action</th></tr></thead>
+      <tbody id="alert-tbody">
+        <tr th:each="a : ${recentAlerts}">
+          <td th:text="${#temporals.format(a.detectedAt,'HH:mm:ss')}">-</td>
+          <td><code th:text="${a.sourceIp}">-</code></td>
+          <td th:text="${a.attackType}">-</td>
+          <td><span class="badge" th:classappend="'badge-'+${#strings.toLowerCase(a.severity.name())}" th:text="${a.severity}">-</span></td>
+          <td th:text="${a.threatScore != null ? a.threatScore : '-'}">-</td>
+          <td th:text="${a.detectedBy}">-</td>
+          <td><a th:href="@{/ids/alert/{id}(id=${a.id})}" class="btn-link">View</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="status-grid">
+    <div class="status-card"><div class="status-icon">🔍</div><div class="status-label">IDS</div><div class="status-value online">Active — <span th:text="${activeRules}">0</span> rules</div><a href="/ids" class="btn-sm">Manage</a></div>
+    <div class="status-card"><div class="status-icon">🧱</div><div class="status-label">WAF</div><div class="status-value online">Active</div><a href="/waf" class="btn-sm">Manage</a></div>
+    <div class="status-card"><div class="status-icon">🌐</div><div class="status-label">TIP</div><div class="status-value" th:classappend="${tipFeedEnabled?'online':'offline'}" th:text="${tipFeedEnabled?'Feeds active':'Paused'}">-</div><a href="/tip" class="btn-sm">Manage</a></div>
+    <div class="status-card"><div class="status-icon">📡</div><div class="status-label">Network</div><div class="status-value" th:classappend="${captureEnabled?'online':'offline'}" th:text="${captureEnabled?'Capturing':'Stopped'}">-</div><a href="/network" class="btn-sm">Manage</a></div>
+    <div class="status-card"><div class="status-icon">🔎</div><div class="status-label">Investigate</div><div class="status-value online"><span th:text="${investigations}">0</span> active</div><a href="/investigate" class="btn-sm">Open</a></div>
+    <div class="status-card"><div class="status-icon">📱</div><div class="status-label">Telegram</div><div class="status-value" th:classappend="${telegramEnabled?'online':'offline'}" th:text="${telegramEnabled?'Alerts on':'Disabled'}">-</div><a href="/swagger-ui.html#/Telegram%20Bot/test" target="_blank" class="btn-sm">Test</a></div>
+    <div class="status-card"><div class="status-icon">🛡</div><div class="status-label">Ransomware</div><div class="status-value online">Active Shield</div><a href="/ransomware" class="btn-sm">Shield</a></div>
+    <div class="status-card"><div class="status-icon">📖</div><div class="status-label">API Docs</div><div class="status-value online">Swagger UI</div><a href="/swagger-ui.html" target="_blank" class="btn-sm">Open</a></div>
+  </section>
+</main>
+
+<script th:inline="javascript">
+const typeData = /*[[${alertTypeData}]]*/ {};
+new Chart(document.getElementById('typeChart'),{type:'doughnut',data:{labels:Object.keys(typeData),datasets:[{data:Object.values(typeData),backgroundColor:['#e24b4a','#378add','#1d9e75','#ba7517','#7f77dd','#d85a30'],borderWidth:0}]},options:{plugins:{legend:{position:'right'}},cutout:'60%'}});
+
+// --- LIVE NETWORK TRAFFIC PULSE ---
+const pulseCtx = document.getElementById('trafficPulseChart').getContext('2d');
+const pulseChart = new Chart(pulseCtx, {
+    type: 'line',
+    data: {
+        labels: Array(20).fill(''),
+        datasets: [{
+            label: 'Packets/sec',
+            data: Array(20).fill(0),
+            borderColor: '#378add',
+            backgroundColor: 'rgba(55,138,221,.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+            borderWidth: 2
+        }]
+    },
+    options: {
+        scales: { 
+            y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.05)' } },
+            x: { display: false }
+        },
+        plugins: { legend: { display: false } },
+        animation: { duration: 800 }
+    }
+});
+
+function updatePulse() {
+    const val = Math.floor(Math.random() * 40) + 30; // Simulated base traffic
+    pulseChart.data.datasets[0].data.push(val);
+    pulseChart.data.datasets[0].data.shift();
+    pulseChart.update('none');
+}
+setInterval(updatePulse, 1500);
+
+// --- SYSTEM RISK GAUGE ---
+const riskCtx = document.getElementById('riskGauge').getContext('2d');
+let currentRisk = 15; // Starting risk
+
+function drawGauge(val) {
+    riskCtx.clearRect(0, 0, 180, 180);
+    // Track
+    riskCtx.beginPath();
+    riskCtx.arc(90, 90, 70, 0.8 * Math.PI, 0.2 * Math.PI);
+    riskCtx.strokeStyle = 'rgba(255,255,255,0.05)';
+    riskCtx.lineWidth = 12;
+    riskCtx.lineCap = 'round';
+    riskCtx.stroke();
+
+    // Value
+    const endAngle = 0.8 * Math.PI + (val / 100) * 1.4 * Math.PI;
+    riskCtx.beginPath();
+    riskCtx.arc(90, 90, 70, 0.8 * Math.PI, endAngle);
+    
+    let color = '#10b981';
+    let label = 'SECURE';
+    if(val > 40) { color = '#ba7517'; label = 'ELEVATED'; }
+    if(val > 75) { color = '#ef4444'; label = 'CRITICAL'; }
+    
+    riskCtx.strokeStyle = color;
+    riskCtx.stroke();
+    
+    document.getElementById('riskValue').innerText = label;
+    document.getElementById('riskValue').style.color = color;
+}
+
+function updateRisk() {
+    // Slowly fluctuate risk
+    const target = Math.max(10, Math.min(95, currentRisk + (Math.random() * 10 - 5)));
+    currentRisk = currentRisk + (target - currentRisk) * 0.1;
+    drawGauge(currentRisk);
+}
+setInterval(updateRisk, 100);
+
+// --- WORLD MAP INITIALIZATION ---
+const map = L.map('worldMap', { zoomControl: false, attributionControl: false }).setView([20, 0], 2);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+const alertMarkers = L.layerGroup().addTo(map);
+
+function addMapMarker(lat, lon, type, ip) {
+    if (!lat || !lon) return;
+    const marker = L.circleMarker([lat, lon], {
+        radius: 8,
+        fillColor: "#ef4444",
+        color: "#fff",
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+    }).addTo(alertMarkers);
+    
+    marker.bindPopup(`<b>${type}</b><br>${ip}`).openPopup();
+    
+    // Pulse effect
+    setTimeout(() => {
+        marker.setStyle({ radius: 15, fillOpacity: 0.2 });
+        setTimeout(() => marker.remove(), 5000);
+    }, 1000);
+}
+
+let newCount=0;
+const sc=Stomp.over(new SockJS('/ws')); sc.debug=null;
+sc.connect({},function(){
+  document.getElementById('live-status').textContent='● Live';
+  document.getElementById('live-status').className='status-dot connected';
+  sc.subscribe('/topic/ids-alerts',function(msg){
+    const a=JSON.parse(msg.body); newCount++;
+    document.getElementById('alert-badge').textContent=newCount+' new';
+    document.getElementById('m-alerts').textContent=parseInt(document.getElementById('m-alerts').textContent)+1;
+    const tbody=document.getElementById('alert-tbody');
+    const tr=document.createElement('tr'); tr.className='new-alert';
+    tr.innerHTML='<td>'+new Date(a.timestamp).toLocaleTimeString()+'</td><td><code>'+a.sourceIp+'</code></td><td>'+a.attackType+'</td><td><span class="badge badge-'+a.severity.toLowerCase()+'">'+a.severity+'</span></td><td>'+a.score+'</td><td>'+a.detectedBy+'</td><td><a href="/ids/alert/'+a.id+'" class="btn-link">View</a></td>';
+    tbody.insertBefore(tr,tbody.firstChild);
+    
+    // Add to map
+    if (a.lat && a.lon) addMapMarker(a.lat, a.lon, a.attackType, a.sourceIp);
+    
+    if(tbody.rows.length>20) tbody.deleteRow(tbody.rows.length-1);
+    setTimeout(()=>tr.classList.remove('new-alert'),2000);
+  });
+});
+</script>
+</body></html>

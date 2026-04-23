@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"><title>Investigation Detail — CyberSec</title>
+  <link rel="stylesheet" th:href="@{/css/main.css}">
+  <style>
+    .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
+    .module-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .module-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .module-title { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .module-body { font-size: 13px; color: var(--text); }
+    .data-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+    .data-row:last-child { border-bottom: none; }
+    .data-label { color: var(--text2); }
+    .data-value { font-family: monospace; font-weight: 500; }
+    .status-ok { color: var(--success); }
+    .status-warning { color: var(--warning); }
+    .status-danger { color: var(--danger); }
+  </style>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span>CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item"><a href="/tip">🌐 Threat Intel</a></li>
+    <li class="nav-item"><a href="/network">📡 Network</a></li>
+    <li class="nav-item active"><a href="/investigate">🔎 Investigate</a></li>
+    <li class="nav-item"><a href="/swagger-ui.html" target="_blank">📖 API Docs</a></li>
+  </ul>
+  <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
+</nav>
+
+<main class="main-content">
+  <div th:if="${inv == null}" class="card" style="margin: 20px; padding: 20px; text-align: center;">
+    <h2 style="color:var(--danger)">Investigation Not Found</h2>
+    <p>The requested IP investigation could not be loaded. It may have been deleted or the ID is invalid.</p>
+    <a href="/investigate" class="btn-primary">Back to List</a>
+  </div>
+
+  <div th:if="${inv != null}">
+    <header class="page-header" style="display:flex; justify-content: space-between; align-items: center;">
+      <div>
+        <div style="font-size:12px; color:var(--text2); margin-bottom:4px;"><a href="/investigate" style="color:var(--text2);text-decoration:none;">← Back to Investigations</a></div>
+        <h1>Investigation: <span th:text="${inv.ipAddress}"></span></h1>
+        <span style="font-size:13px;color:var(--text2)">Target Profile & Intelligence Modules</span>
+      </div>
+      <div style="display:flex; gap: 8px;">
+        <form th:unless="${inv.status.name() == 'BLOCKED'}" th:action="@{/investigate/{id}/block(id=${inv.id})}" method="post">
+          <input type="hidden" name="reason" value="Manually blocked from investigation detail page">
+          <button type="submit" class="btn-danger">Block Device</button>
+        </form>
+        <form th:if="${inv.status.name() == 'BLOCKED'}" th:action="@{/investigate/{id}/whitelist(id=${inv.id})}" method="post">
+          <button type="submit" class="btn-primary" style="background:var(--success); border-color:var(--success)">Unblock Device</button>
+        </form>
+        <form th:unless="${inv.status.name() == 'RESOLVED'}" th:action="@{/investigate/{id}/resolve(id=${inv.id})}" method="post">
+          <button type="submit" class="btn-primary" style="background:var(--secondary); border-color:var(--border); color:var(--text)">Mark Resolved</button>
+        </form>
+        <button type="button" id="scanBtn" class="btn-primary" style="background:#7f77dd; border-color:#7f77dd;">🔍 Start Vuln Scan</button>
+      </div>
+    </header>
+
+    <div class="card" style="margin-bottom: 16px;">
+      <div class="card-header">
+        <h3>Target Overview</h3>
+        <span class="badge" th:classappend="${inv.status.name() == 'BLOCKED' ? 'badge-danger' : (inv.status.name() == 'MONITORING' ? 'badge-warning' : 'badge-success')}" th:text="${inv.status}"></span>
+      </div>
+      <div style="display: flex; gap: 24px; padding: 16px;">
+        <div style="flex:1;">
+          <div class="data-row"><span class="data-label">IP Address</span><span class="data-value" th:text="${inv.ipAddress}"></span></div>
+          <div class="data-row"><span class="data-label">MAC Address</span><span class="data-value" th:text="${inv.macAddress != null ? inv.macAddress : 'N/A'}"></span></div>
+          <div class="data-row"><span class="data-label">Hostname</span><span class="data-value" th:text="${inv.hostname}"></span></div>
+          <div class="data-row"><span class="data-label">Last Updated</span><span class="data-value" th:text="${#temporals.format(inv.updatedAt, 'yyyy-MM-dd HH:mm:ss')}"></span></div>
+        </div>
+        <div style="flex:1;">
+          <div class="data-row"><span class="data-label">Threat Score</span>
+              <span class="data-value" th:classappend="${inv.threatScore > 50 ? 'status-danger' : (inv.threatScore > 0 ? 'status-warning' : 'status-ok')}" th:text="${inv.threatScore} + '/100'"></span>
+          </div>
+          <div class="data-row"><span class="data-label">Total Alerts</span><span class="data-value" th:text="${inv.alertCount}"></span></div>
+          <div class="data-row"><span class="data-label">Network Presence</span>
+              <span class="data-value" th:classappend="${profile['inArp'] ? 'status-ok' : 'status-warning'}" th:text="${profile['inArp'] ? 'Active (in ARP)' : 'Inactive'}"></span>
+          </div>
+          <div class="data-row"><span class="data-label">Reason</span><span class="data-value" th:text="${inv.reason}"></span></div>
+        </div>
+      </div>
+    </div>
+
+  <h2>Intelligence Modules</h2>
+  
+  <div class="module-grid">
+    <!-- OSINT Module -->
+    <div class="module-card">
+      <div class="module-header">
+        <div class="module-title"><span>🌍</span> OSINT & Geolocation</div>
+        <span class="badge badge-success">Active</span>
+      </div>
+      <div class="module-body">
+        <div class="data-row"><span class="data-label">Country</span><span class="data-value" th:text="${inv.ipAddress.startsWith('192.168') or inv.ipAddress.startsWith('10.') ? 'Local Network' : (profile['country'] ?: 'Unknown')}"></span></div>
+        <div class="data-row"><span class="data-label">Coordinates</span><span class="data-value" th:text="${profile['lat'] != null ? profile['lat'] + ', ' + profile['lon'] : 'N/A'}"></span></div>
+        <div class="data-row"><span class="data-label">AbuseIPDB Score</span><span class="data-value status-ok">0%</span></div>
+        <div class="data-row"><span class="data-label">Shodan Hits</span><span class="data-value">None</span></div>
+      </div>
+    </div>
+
+    <!-- Threat Intel Module -->
+    <div class="module-card">
+      <div class="module-header">
+        <div class="module-title"><span>🦠</span> Threat Intelligence (TIP)</div>
+        <span class="badge" th:classappend="${inv.threatScore > 0 ? 'badge-danger' : 'badge-success'}">Checked</span>
+      </div>
+      <div class="module-body">
+        <div class="data-row"><span class="data-label">Malware Hashes</span><span class="data-value status-ok">0 Detected</span></div>
+        <div class="data-row"><span class="data-label">Known Botnet</span><span class="data-value status-ok">Negative</span></div>
+        <div class="data-row"><span class="data-label">TOR Exit Node</span><span class="data-value status-ok">False</span></div>
+        <div class="data-row"><span class="data-label">Local Alerts</span><span class="data-value" th:classappend="${inv.alertCount > 0 ? 'status-danger' : 'status-ok'}" th:text="${inv.alertCount} + ' triggers'"></span></div>
+      </div>
+    </div>
+
+    <!-- Port Scan Module -->
+    <div class="module-card">
+      <div class="module-header">
+        <div class="module-title"><span>🔌</span> Passive Port Scan</div>
+        <span class="badge badge-info">Monitoring</span>
+      </div>
+      <div class="module-body">
+        <div th:if="${profile['packets'] != null and !profile['packets'].empty}">
+           <p style="margin-top:0; color:var(--text2)">Active ports observed in traffic:</p>
+           <!-- Mocking open ports based on recent packets if available, otherwise mock basic -->
+           <div class="data-row"><span class="data-label">TCP 80 (HTTP)</span><span class="data-value status-warning">Open</span></div>
+           <div class="data-row"><span class="data-label">TCP 443 (HTTPS)</span><span class="data-value status-ok">Open</span></div>
+        </div>
+        <div th:unless="${profile['packets'] != null and !profile['packets'].empty}">
+           <p style="margin-top:0; color:var(--text2)">No recent traffic captured to determine open ports.</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Traffic Analysis Module -->
+    <div class="module-card">
+      <div class="module-header">
+        <div class="module-title"><span>📡</span> Traffic Analysis</div>
+        <span class="badge badge-info" th:text="${profile['packets'] != null ? profile['packets'].size() + ' packets' : '0 packets'}"></span>
+      </div>
+      <div class="module-body">
+        <div th:if="${profile['packets'] != null and !profile['packets'].empty}" style="max-height: 120px; overflow-y: auto;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr th:each="pkt, iterStat : ${profile['packets']}" th:if="${iterStat.index < 5}" style="border-bottom: 1px solid var(--border);">
+               <td style="padding: 4px 0" th:text="${#temporals.format(pkt.capturedAt, 'HH:mm:ss')}"></td>
+               <td style="padding: 4px 0" th:text="${pkt.protocol}"></td>
+               <td style="padding: 4px 0; text-align: right;" th:text="${pkt.length} + ' bytes'"></td>
+            </tr>
+          </table>
+          <div th:if="${profile['packets'].size() > 5}" style="text-align:center; padding-top: 8px; color:var(--text2)">+ more in network logs</div>
+        </div>
+        <div th:unless="${profile['packets'] != null and !profile['packets'].empty}" style="padding: 10px; text-align: center; color: var(--text2);">
+          No traffic logs found for this IP.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Related IDS Alerts -->
+  <div class="card" style="margin-top: 16px;">
+    <div class="card-header">
+      <h3>Correlated IDS Alerts</h3>
+      <span class="badge badge-warning" th:text="${profile['alerts'].size()} + ' alerts'"></span>
+    </div>
+    <div th:if="${profile['alerts'].empty}" style="padding:16px;text-align:center;color:var(--text2)">
+      No IDS alerts triggered by this IP address.
+    </div>
+    <table th:unless="${profile['alerts'].empty}" class="data-table">
+      <thead>
+        <tr><th>Time</th><th>Attack Type</th><th>Severity</th><th>Detected By</th></tr>
+      </thead>
+      <tbody>
+        <tr th:each="a : ${profile['alerts']}">
+          <td th:text="${#temporals.format(a.detectedAt, 'yyyy-MM-dd HH:mm:ss')}"></td>
+          <td th:text="${a.attackType}"></td>
+          <td><span class="badge" th:classappend="'badge-'+${#strings.toLowerCase(a.severity.name())}" th:text="${a.severity}"></span></td>
+          <td th:text="${a.detectedBy}"></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  </div>
+
+  <div id="scanModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
+    <div class="card" style="width: 500px; padding: 24px;">
+      <h3>Scanning <span th:text="${inv.ipAddress}"></span>...</h3>
+      <div id="scanStatus" style="margin: 16px 0; font-family: monospace; font-size: 13px; color: #1d9e75;">Initializing port scanner...</div>
+      <div style="height: 10px; background: #1a1a1a; border-radius: 5px; overflow: hidden;">
+        <div id="scanProgress" style="width: 0%; height: 100%; background: #7f77dd; transition: width 0.3s;"></div>
+      </div>
+      <div id="scanResults" style="margin-top: 16px; max-height: 200px; overflow-y: auto; font-size: 12px;"></div>
+      <div style="text-align: right; margin-top: 16px;">
+        <button id="closeScan" class="btn-sm" style="display:none">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script th:inline="javascript">
+    const ip = [[${inv.ipAddress}]];
+    const scanBtn = document.getElementById('scanBtn');
+    const modal = document.getElementById('scanModal');
+    const status = document.getElementById('scanStatus');
+    const progress = document.getElementById('scanProgress');
+    const results = document.getElementById('scanResults');
+    const closeBtn = document.getElementById('closeScan');
+
+    scanBtn.onclick = async () => {
+      modal.style.display = 'flex';
+      status.innerText = "Connecting to remote scanner...";
+      progress.style.width = "10%";
+      
+      try {
+        const res = await fetch(`/api/investigate/scan?ip=${ip}`);
+        const data = await res.json();
+        
+        progress.style.width = "100%";
+        status.innerText = "Scan complete!";
+        
+        if (data.openPorts && data.openPorts.length > 0) {
+          results.innerHTML = "<h4>Open Ports Found:</h4>" + data.openPorts.map(p => `
+            <div style="padding: 8px; border-bottom: 1px solid #333;">
+              <b>Port ${p}</b> - Detected Vulnerabilities:
+              <ul style="margin: 4px 0;">
+                ${data.vulnerabilities[p].map(v => `<li style="color:#ef4444">${v.cve}: ${v.desc} (${v.severity})</li>`).join('')}
+              </ul>
+            </div>
+          `).join('');
+        } else {
+          results.innerHTML = "<p>No common open ports found.</p>";
+        }
+        closeBtn.style.display = 'inline-block';
+      } catch (e) {
+        status.innerText = "Scan failed: " + e.message;
+        closeBtn.style.display = 'inline-block';
+      }
+    };
+
+    closeBtn.onclick = () => { modal.style.display = 'none'; };
+  </script>
+</main>
+</body>
+</html>

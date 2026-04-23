@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"><title>Network Capture</title>
+  <link rel="stylesheet" th:href="@{/css/main.css}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span>CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item"><a href="/tip">🌐 Threat Intel</a></li>
+    <li class="nav-item active"><a href="/network">📡 Network</a></li>
+    <li class="nav-item"><a href="/investigate">🔎 Investigate</a></li>
+    <li class="nav-item"><a href="/swagger-ui.html" target="_blank">📖 API Docs</a></li>
+  </ul>
+  <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
+</nav>
+<main class="main-content">
+  <header class="page-header">
+    <h1>Network Packet Capture</h1>
+    <div class="header-meta">
+      <span id="ws-status" class="status-dot connecting">● Connecting...</span>
+      <form action="/network/capture/toggle" method="post" style="display:inline">
+        <input type="hidden" name="enable" th:value="${!captureEnabled}">
+        <button type="submit" class="btn-sm" th:text="${captureEnabled ? '⏹ Stop Capture' : '▶ Start Capture'}">Toggle</button>
+      </form>
+    </div>
+  </header>
+
+  <div th:if="${!captureEnabled}" style="background:rgba(186,117,23,.1);border:1px solid var(--warning);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--warning)">
+    ⚠️ Packet capture is stopped. Click <strong>Start Capture</strong> above, then browse any page to see live packets.
+  </div>
+  <div th:if="${captureEnabled}" style="background:rgba(29,158,117,.1);border:1px solid var(--success);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--success)">
+    ✅ Packet capture is active. Browse any page — packets appear in the live feed below within 1 second.
+  </div>
+
+  <section class="metrics-grid">
+    <div class="metric-card info"><div class="metric-label">Packets Today</div><div class="metric-value" id="pkt-count" th:text="${packetsToday}">0</div></div>
+    <div class="metric-card danger"><div class="metric-label">Suspicious Packets</div><div class="metric-value" th:text="${suspiciousCount}">0</div></div>
+    <div class="metric-card success"><div class="metric-label">Capture Status</div>
+      <div class="metric-value" style="font-size:15px"
+           th:text="${captureEnabled ? 'Active' : 'Stopped'}"
+           th:style="${captureEnabled ? 'color:var(--success)' : 'color:var(--danger)'}">-</div>
+    </div>
+    <div class="metric-card warning"><div class="metric-label">Interfaces Found</div><div class="metric-value" th:text="${interfaces.size()}">0</div></div>
+  </section>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div class="card">
+      <div class="card-header"><h3>Protocol distribution</h3></div>
+      <div style="padding:16px;position:relative;min-height:200px">
+        <div th:if="${protocols.isEmpty()}" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:13px;flex-direction:column;gap:8px">
+          <span style="font-size:24px">📡</span>
+          <span>No packets yet — browse any page with capture active</span>
+        </div>
+        <canvas id="protoChart" height="180" th:style="${protocols.isEmpty() ? 'opacity:0' : ''}"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Top talkers (30 min)</h3></div>
+      <table class="data-table">
+        <thead><tr><th>Source IP</th><th>Packets sent</th></tr></thead>
+        <tbody>
+          <tr th:each="e : ${topTalkers}">
+            <td><code th:text="${e.key}">-</code></td>
+            <td th:text="${e.value}">0</td>
+          </tr>
+          <tr th:if="${topTalkers.isEmpty()}">
+            <td colspan="2" style="text-align:center;padding:20px;color:var(--text2)">No traffic yet</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Live packet table -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <h3>Live packet feed</h3>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="pkt-live" style="font-size:12px;color:var(--text2)">0 packets captured</span>
+        <span class="badge badge-info" id="live-badge">Live</span>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+    <table class="data-table" id="pkt-table" style="min-width:950px">
+      <thead>
+        <tr>
+          <th style="width:40px">No.</th>
+          <th style="width:100px">Time</th>
+          <th style="width:160px">Source</th>
+          <th style="width:160px">Destination</th>
+          <th style="width:70px">Proto</th>
+          <th style="width:60px">Len</th>
+          <th style="width:100px">TCP Flags</th>
+          <th>Info</th>
+          <th style="width:90px">Status</th>
+        </tr>
+      </thead>
+      <tbody id="pkt-tbody">
+        <tr th:each="p, i : ${recentPackets}" th:classappend="${p.suspicious ? 'new-alert' : ''}">
+          <td th:text="${i.count}">-</td>
+          <td><code style="font-size:11px" th:text="${#temporals.format(p.capturedAt,'HH:mm:ss')}">-</code></td>
+          <td><code style="font-size:11px" th:text="${(p.srcIp != null ? p.srcIp : '?') + ':' + (p.srcPort != null ? p.srcPort : '?')}">-</code></td>
+          <td><code style="font-size:11px" th:text="${(p.dstIp != null ? p.dstIp : '?') + ':' + (p.dstPort != null ? p.dstPort : '?')}">-</code></td>
+          <td>
+            <span class="badge"
+              th:classappend="${p.protocol == 'HTTPS' ? 'badge-success' : p.protocol == 'HTTP' ? 'badge-info' : 'badge-medium'}"
+              th:text="${p.protocol}">-</span>
+          </td>
+          <td th:text="${p.length}">-</td>
+          <td><code style="font-size:10px" th:text="${p.flags}">-</code></td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" th:text="${p.info}">-</td>
+          <td>
+            <span th:if="${p.suspicious}" class="badge badge-danger">Suspicious</span>
+            <span th:unless="${p.suspicious}" class="badge badge-success">OK</span>
+          </td>
+        </tr>
+        <tr th:if="${recentPackets.isEmpty()}" id="empty-row">
+          <td colspan="9" style="text-align:center;padding:32px;color:var(--text2)">
+            No packets yet — make sure capture is active, then reload this page or click any link
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- ARP + Interfaces row -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="card">
+      <div class="card-header"><h3>Network interfaces (this machine)</h3></div>
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>IP</th><th>MAC Address</th><th>MTU</th></tr></thead>
+        <tbody>
+          <tr th:each="iface : ${interfaces}">
+            <td><code th:text="${iface['name']}">-</code></td>
+            <td><code th:text="${iface['ip']}">-</code></td>
+            <td><code style="font-size:11px" th:text="${iface['mac']}">-</code></td>
+            <td th:text="${iface['mtu']}">-</td>
+          </tr>
+          <tr th:if="${interfaces.isEmpty()}">
+            <td colspan="4" style="text-align:center;padding:16px;color:var(--text2)">No active interfaces found</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>ARP table — network devices</h3>
+        <span style="font-size:12px;color:var(--text2)">run: arp -a</span>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>IP Address</th><th>MAC Address</th><th>Interface</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr th:each="d : ${arpTable}">
+            <td><code th:text="${d['ip']}">-</code></td>
+            <td><code style="font-size:11px" th:text="${d['mac']}">-</code></td>
+            <td th:text="${d['iface'] != null ? d['iface'] : '-'}">-</td>
+            <td><span class="badge badge-success" th:text="${d['status']}">-</span></td>
+          </tr>
+          <tr th:if="${arpTable.isEmpty()}">
+            <td colspan="4" style="text-align:center;padding:16px;color:var(--text2)">No ARP entries found</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script th:inline="javascript">
+// Protocol chart
+const protos = /*[[${protocols}]]*/ {};
+const pkeys  = Object.keys(protos);
+if (pkeys.length > 0) {
+  new Chart(document.getElementById('protoChart'), {
+    type: 'doughnut',
+    data: {
+      labels: pkeys,
+      datasets: [{ data: Object.values(protos), backgroundColor: ['#378add','#1d9e75','#ba7517','#e24b4a','#7f77dd','#d85a30'], borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { position: 'right' } }, cutout: '55%' }
+  });
+}
+
+// Live WebSocket packet feed
+let pktNum = /*[[${recentPackets.size()}]]*/ 0;
+document.getElementById('pkt-live').textContent = pktNum + ' packets captured';
+
+const sc = Stomp.over(new SockJS('/ws'));
+sc.debug = null;
+sc.connect({}, function() {
+  document.getElementById('ws-status').textContent = '● Live';
+  document.getElementById('ws-status').className = 'status-dot connected';
+
+  sc.subscribe('/topic/network-packets', function(msg) {
+    const p = JSON.parse(msg.body);
+    pktNum++;
+    document.getElementById('pkt-count').textContent = parseInt(document.getElementById('pkt-count').textContent) + 1;
+    document.getElementById('pkt-live').textContent = pktNum + ' packets captured';
+
+    // Remove empty row if present
+    const emptyRow = document.getElementById('empty-row');
+    if (emptyRow) emptyRow.remove();
+
+    const tbody = document.getElementById('pkt-tbody');
+    const t = new Date(p.time);
+    const timeStr = t.toTimeString().substring(0, 8);
+    const proto = p.protocol || 'HTTP';
+    const protoBadge = proto === 'HTTPS' ? 'badge-success' : proto === 'HTTP' ? 'badge-info' : 'badge-medium';
+
+    const tr = document.createElement('tr');
+    if (p.suspicious) { tr.className = 'new-alert'; tr.style.background = 'rgba(226,75,74,.08)'; }
+
+    tr.innerHTML =
+      '<td>' + pktNum + '</td>' +
+      '<td><code style="font-size:11px">' + timeStr + '</code></td>' +
+      '<td><code style="font-size:11px">' + (p.srcIp||'?') + ':' + (p.srcPort||'?') + '</code></td>' +
+      '<td><code style="font-size:11px">' + (p.dstIp||'?') + ':' + (p.dstPort||'?') + '</code></td>' +
+      '<td><span class="badge ' + protoBadge + '">' + proto + '</span></td>' +
+      '<td>' + (p.length||0) + '</td>' +
+      '<td><code style="font-size:10px">' + (p.flags||'') + '</code></td>' +
+      '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">' + (p.info||'') + '</td>' +
+      '<td><span class="badge ' + (p.suspicious ? 'badge-danger' : 'badge-success') + '">' + (p.suspicious ? 'Suspicious' : 'OK') + '</span></td>';
+
+    tbody.insertBefore(tr, tbody.firstChild);
+    if (tbody.rows.length > 100) tbody.deleteRow(tbody.rows.length - 1);
+    setTimeout(() => tr.classList.remove('new-alert'), 2000);
+  });
+}, function(err) {
+  document.getElementById('ws-status').textContent = '● Disconnected';
+  document.getElementById('ws-status').className = 'status-dot disconnected';
+});
+</script>
+</body></html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"><title>Investigation Tool</title>
+  <link rel="stylesheet" th:href="@{/css/main.css}">
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span>CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item"><a href="/tip">🌐 Threat Intel</a></li>
+    <li class="nav-item"><a href="/network">📡 Network</a></li>
+    <li class="nav-item active"><a href="/investigate">🔎 Investigate</a></li>
+    <li class="nav-item"><a href="/swagger-ui.html" target="_blank">📖 API Docs</a></li>
+  </ul>
+  <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
+</nav>
+<main class="main-content">
+  <header class="page-header">
+    <h1>Investigation Tool</h1>
+    <span style="font-size:13px;color:var(--text2)">Block · Monitor · MAC lookup · Telegram alert</span>
+  </header>
+
+  <!-- Error Alert -->
+  <div th:if="${error}" class="card" style="margin-bottom:16px; border-left: 4px solid var(--danger); background: rgba(226, 75, 74, 0.1);">
+    <div style="padding:12px; color: var(--danger); font-weight: 500;">
+      ⚠️ <span th:text="${error}">Error message here</span>
+    </div>
+  </div>
+
+  <!-- Add investigation form — action uses plain POST, no CSRF token needed (disabled globally) -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><h3>Start new investigation</h3></div>
+    <div style="padding:16px">
+      <form action="/investigate/start" method="post">
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="flex:1;min-width:160px;margin-bottom:0">
+            <label class="form-label">IP Address *</label>
+            <input class="form-control" type="text" name="ip" placeholder="e.g. 192.168.1.100 or 127.0.0.1" required>
+          </div>
+          <div class="form-group" style="flex:2;min-width:220px;margin-bottom:0">
+            <label class="form-label">Reason</label>
+            <input class="form-control" type="text" name="reason" value="Manual investigation" placeholder="Why are you investigating this IP?">
+          </div>
+          <button type="submit" class="btn-primary" style="height:38px;white-space:nowrap;flex-shrink:0">
+            Investigate →
+          </button>
+        </div>
+        <p style="font-size:12px;color:var(--text2);margin-top:8px">
+          Tip: Use <code>127.0.0.1</code> to investigate yourself, or pick any IP from the ARP table below.
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Active investigations -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <h3>Device investigations</h3>
+      <span class="badge badge-info" th:text="${investigations.size()} + ' devices'">0 devices</span>
+    </div>
+    <div th:if="${investigations.empty}" style="padding:32px;text-align:center;color:var(--text2)">
+      No investigations yet — enter an IP address above and click Investigate →
+    </div>
+    <div th:unless="${investigations.empty}" style="overflow-x:auto">
+      <table class="data-table" style="min-width:1000px">
+        <thead>
+          <tr>
+            <th>IP Address</th><th>MAC Address</th><th>Hostname</th>
+            <th>Status</th><th>Score</th><th>Alerts</th>
+            <th>Reason</th><th>Updated</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:each="inv : ${investigations}">
+            <td><code th:text="${inv.ipAddress}">-</code></td>
+            <td>
+              <code style="font-size:11px" th:text="${inv.macAddress != null and !inv.macAddress.isEmpty() ? inv.macAddress : 'Resolving...'}">-</code>
+            </td>
+            <td style="font-size:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" th:text="${inv.hostname}">-</td>
+            <td>
+              <span class="badge"
+                th:classappend="${inv.status.name() == 'BLOCKED' ? 'badge-danger' :
+                                  inv.status.name() == 'MONITORING' ? 'badge-warning' :
+                                  inv.status.name() == 'WHITELISTED' ? 'badge-success' : 'badge-medium'}"
+                th:text="${inv.status}">-</span>
+            </td>
+            <td>
+              <span th:text="${inv.threatScore}">0</span>
+              <span style="font-size:11px;color:var(--text2)">/100</span>
+            </td>
+            <td th:text="${inv.alertCount}">0</td>
+            <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)" th:text="${inv.reason}">-</td>
+            <td style="font-size:12px;color:var(--text2)" th:text="${#temporals.format(inv.updatedAt,'HH:mm dd/MM')}">-</td>
+            <td>
+              <div style="display:flex;gap:5px;flex-wrap:nowrap">
+                <!-- Block (only if not already blocked) -->
+                <form th:unless="${inv.status.name() == 'BLOCKED'}"
+                      th:action="@{/investigate/{id}/block(id=${inv.id})}" method="post" style="display:inline">
+                  <input type="hidden" name="reason" th:value="${'Blocked: ' + inv.reason}">
+                  <button type="submit" class="btn-danger" style="font-size:11px;padding:4px 10px">Block</button>
+                </form>
+                <!-- Unblock (only if blocked) -->
+                <form th:if="${inv.status.name() == 'BLOCKED'}"
+                      th:action="@{/investigate/{id}/whitelist(id=${inv.id})}" method="post" style="display:inline">
+                  <button type="submit" class="btn-sm" style="font-size:11px;padding:4px 10px;border-color:var(--success);color:var(--success)">Unblock</button>
+                </form>
+                <!-- Refresh -->
+                <form th:action="@{/investigate/{id}/refresh(id=${inv.id})}" method="post" style="display:inline">
+                  <button type="submit" class="btn-sm" style="font-size:11px;padding:4px 10px" title="Re-resolve MAC, recount alerts">↻ Refresh</button>
+                </form>
+                <!-- Resolve -->
+                <form th:unless="${inv.status.name() == 'RESOLVED'}"
+                      th:action="@{/investigate/{id}/resolve(id=${inv.id})}" method="post" style="display:inline">
+                  <input type="hidden" name="notes" value="Resolved via UI">
+                  <button type="submit" class="btn-sm" style="font-size:11px;padding:4px 10px">Resolve</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ARP Table — quick investigate from here -->
+  <div class="card">
+    <div class="card-header">
+      <h3>ARP table — devices visible on your network</h3>
+      <span style="font-size:12px;color:var(--text2)">same as: <code>arp -a</code></span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>IP Address</th><th>MAC Address</th><th>Interface</th><th>Status</th><th>Quick action</th></tr></thead>
+      <tbody>
+        <tr th:each="d : ${arpTable}">
+          <td><code th:text="${d['ip']}">-</code></td>
+          <td><code style="font-size:11px" th:text="${d['mac']}">-</code></td>
+          <td th:text="${d['iface'] != null ? d['iface'] : '-'}">-</td>
+          <td><span class="badge badge-success" th:text="${d['status']}">-</span></td>
+          <td>
+            <form action="/investigate/start" method="post" style="display:inline">
+              <input type="hidden" name="ip" th:value="${d['ip']}">
+              <input type="hidden" name="reason" value="Found in ARP table — manual investigation">
+              <button type="submit" class="btn-sm" style="font-size:11px;padding:3px 10px">Investigate</button>
+            </form>
+          </td>
+        </tr>
+        <tr th:if="${arpTable.empty}">
+          <td colspan="5" style="text-align:center;padding:20px;color:var(--text2)">No devices found in ARP table</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body></html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title>IDS</title><link rel="stylesheet" th:href="@{/css/main.css}">
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span>CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item active"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item"><a href="/tip">🌐 Threat Intel</a></li>
+    <li class="nav-item"><a href="/network">📡 Network</a></li>
+    <li class="nav-item"><a href="/investigate">🔎 Investigate</a></li>
+    <li class="nav-item"><a href="/swagger-ui.html" target="_blank">📖 API Docs</a></li>
+  </ul>
+  <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
+</nav>
+<main class="main-content">
+  <header class="page-header"><h1>Intrusion Detection System</h1><span id="ws" class="status-dot connecting">● Connecting...</span></header>
+  <section class="metrics-grid">
+    <div class="metric-card danger"><div class="metric-label">Critical</div><div class="metric-value" th:text="${criticalCount}">0</div></div>
+    <div class="metric-card warning"><div class="metric-label">High</div><div class="metric-value" th:text="${highCount}">0</div></div>
+    <div class="metric-card info"><div class="metric-label">Active Rules</div><div class="metric-value" th:text="${allRules.size()}">0</div></div>
+    <div class="metric-card success"><div class="metric-label">Open Alerts</div><div class="metric-value" id="open-cnt" th:text="${openAlerts.size()}">0</div></div>
+  </section>
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="btn-sm" onclick="show('alerts',this)">Open Alerts</button>
+    <button class="btn-sm" onclick="show('rules',this)">Signature Rules</button>
+  </div>
+  <div id="tab-alerts" class="card">
+    <div class="card-header"><h3>Open alerts</h3><span class="badge badge-danger">Live</span></div>
+    <table class="data-table">
+      <thead><tr><th>ID</th><th>Time</th><th>Source IP</th><th>Type</th><th>Severity</th><th>Score</th><th>Module</th><th>Action</th></tr></thead>
+      <tbody id="alert-tbody">
+        <tr th:each="a : ${openAlerts}">
+          <td th:text="${a.id}">-</td>
+          <td th:text="${#temporals.format(a.detectedAt,'HH:mm dd/MM')}">-</td>
+          <td><code th:text="${a.sourceIp}">-</code></td>
+          <td th:text="${a.attackType}">-</td>
+          <td><span class="badge" th:classappend="'badge-'+${#strings.toLowerCase(a.severity.name())}" th:text="${a.severity}">-</span></td>
+          <td th:text="${a.threatScore}">-</td>
+          <td th:text="${a.detectedBy}">-</td>
+          <td><a th:href="@{/ids/alert/{id}(id=${a.id})}" class="btn-link">Investigate →</a></td>
+        </tr>
+        <tr th:if="${openAlerts.empty}"><td colspan="8" style="text-align:center;padding:24px;color:var(--text2)">No open alerts</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div id="tab-rules" class="card" style="display:none">
+    <div class="card-header"><h3>Signature rules</h3></div>
+    <table class="data-table">
+      <thead><tr><th>ID</th><th>Rule name</th><th>Type</th><th>Severity</th><th>Pattern preview</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr th:each="r : ${allRules}">
+          <td th:text="${r.id}">-</td>
+          <td th:text="${r.ruleName}">-</td>
+          <td th:text="${r.attackType}">-</td>
+          <td><span class="badge" th:classappend="'badge-'+${#strings.toLowerCase(r.severity)}" th:text="${r.severity}">-</span></td>
+          <td><code style="font-size:11px" th:text="${#strings.abbreviate(r.regexPattern,40)}">-</code></td>
+          <td><span th:if="${r.enabled}" style="color:var(--success)">✓ Active</span><span th:unless="${r.enabled}" style="color:var(--danger)">✗ Off</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+<script>
+function show(n,b){
+  document.getElementById('tab-alerts').style.display=n==='alerts'?'block':'none';
+  document.getElementById('tab-rules').style.display=n==='rules'?'block':'none';
+}
+const sc=Stomp.over(new SockJS('/ws')); sc.debug=null;
+sc.connect({},function(){
+  document.getElementById('ws').textContent='● Live'; document.getElementById('ws').className='status-dot connected';
+  sc.subscribe('/topic/ids-alerts',function(m){
+    const a=JSON.parse(m.body);
+    const tr=document.createElement('tr'); tr.className='new-alert';
+    tr.innerHTML='<td>'+a.id+'</td><td>'+new Date(a.timestamp).toLocaleTimeString()+'</td><td><code>'+a.sourceIp+'</code></td><td>'+a.attackType+'</td><td><span class="badge badge-'+a.severity.toLowerCase()+'">'+a.severity+'</span></td><td>'+a.score+'</td><td>'+a.detectedBy+'</td><td><a href="/ids/alert/'+a.id+'" class="btn-link">Investigate →</a></td>';
+    const tbody=document.getElementById('alert-tbody');
+    tbody.insertBefore(tr,tbody.firstChild);
+    document.getElementById('open-cnt').textContent=parseInt(document.getElementById('open-cnt').textContent)+1;
+    setTimeout(()=>tr.classList.remove('new-alert'),2000);
+  });
+});
+</script>
+</body></html>

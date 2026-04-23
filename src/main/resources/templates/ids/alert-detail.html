@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title>Alert Detail</title><link rel="stylesheet" th:href="@{/css/main.css}"></head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span>CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item active"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item"><a href="/tip">🌐 Threat Intel</a></li>
+    <li class="nav-item"><a href="/network">📡 Network</a></li>
+    <li class="nav-item"><a href="/investigate">🔎 Investigate</a></li>
+    <li class="nav-item"><a href="/swagger-ui.html" target="_blank">📖 API Docs</a></li>
+  </ul>
+  <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
+</nav>
+<main class="main-content">
+  <header class="page-header"><h1>Alert #<span th:text="${alert?.id}">?</span></h1><a href="/ids" class="btn-sm">← Back to IDS</a></header>
+  <div th:if="${alert == null}" class="card" style="padding:32px;text-align:center;color:var(--text2)">Alert not found.</div>
+  <div th:if="${alert != null}">
+    <div class="metrics-grid">
+      <div class="metric-card danger"><div class="metric-label">Severity</div><div class="metric-value" style="font-size:20px" th:text="${alert.severity}">-</div></div>
+      <div class="metric-card info"><div class="metric-label">Threat Score</div><div class="metric-value" th:text="${alert.threatScore != null ? alert.threatScore : 'N/A'}">-</div></div>
+      <div class="metric-card warning"><div class="metric-label">Status</div><div class="metric-value" style="font-size:18px" th:text="${alert.status}">-</div></div>
+      <div class="metric-card success"><div class="metric-label">Detected By</div><div class="metric-value" style="font-size:14px" th:text="${alert.detectedBy}">-</div></div>
+    </div>
+    <div class="card" style="padding:24px;margin-bottom:16px">
+      <h3 style="margin-bottom:16px;font-size:13px;color:var(--text2)">ALERT DETAILS</h3>
+      <table style="width:100%;font-size:14px;border-collapse:collapse">
+        <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text2);width:160px">Source IP</td><td><code th:text="${alert.sourceIp}">-</code></td></tr>
+        <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text2)">Attack type</td><td th:text="${alert.attackType}">-</td></tr>
+        <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text2)">Detected at</td><td th:text="${#temporals.format(alert.detectedAt,'dd MMM yyyy HH:mm:ss')}">-</td></tr>
+        <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 0;color:var(--text2)">Request URI</td><td><code th:text="${alert.requestUri}">-</code></td></tr>
+        <tr><td style="padding:10px 0;color:var(--text2)">Detail</td><td style="line-height:1.6" th:text="${alert.detail}">-</td></tr>
+      </table>
+    </div>
+    <div class="card" style="padding:24px">
+      <h3 style="margin-bottom:16px;font-size:13px;color:var(--text2)">UPDATE STATUS</h3>
+      <form th:action="@{/ids/alert/{id}/status(id=${alert.id})}" method="post" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:160px">
+          <label class="form-label">New status</label>
+          <select class="form-control" name="status">
+            <option value="OPEN">Open</option><option value="INVESTIGATING">Investigating</option>
+            <option value="RESOLVED">Resolved</option><option value="FALSE_POSITIVE">False Positive</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:2;min-width:200px">
+          <label class="form-label">Notes</label>
+          <input class="form-control" type="text" name="notes" placeholder="Investigation notes..." th:value="${alert.notes}">
+        </div>
+        <button type="submit" class="btn-primary" style="height:38px">Update</button>
+      </form>
+    </div>
+  </div>
+</main>
+</body></html>

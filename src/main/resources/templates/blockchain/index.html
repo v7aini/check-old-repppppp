@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Blockchain Integrity Ledger | CyberSec</title>
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .chain-container { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+        .block-card { 
+            background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: 12px; padding: 20px;
+            position: relative; transition: 0.3s;
+        }
+        .block-card:hover { border-color: var(--neon-blue); transform: translateX(5px); }
+        .block-card::before {
+            content: '\f0c1'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
+            position: absolute; left: -30px; top: 50%; transform: translateY(-50%);
+            color: var(--glass-border); font-size: 14px;
+        }
+        .block-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .hash-tag { font-family: monospace; font-size: 11px; background: rgba(0,210,255,0.1); color: var(--neon-blue); padding: 2px 8px; border-radius: 4px; }
+        .integrity-status { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div th:replace="~{dashboard/index :: sidebar}"></div>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1>Blockchain Integrity Ledger</h1>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <button onclick="simulateTamper()" class="btn-sm" style="background: rgba(255, 75, 43, 0.1); color: #ff4b2b; border: 1px solid #ff4b2b;">
+                    <i class="fas fa-bomb"></i> SIMULATE TAMPER ATTACK
+                </button>
+                <div id="integrityBanner" class="integrity-status" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid #10b981;">
+                    <i class="fas fa-check-circle"></i> LEDGER INTEGRITY VERIFIED
+                </div>
+            </div>
+        </header>
+
+        <div class="dashboard-container">
+            <div class="card" style="margin-bottom: 24px; border-left: 4px solid var(--neon-blue);">
+                <div style="display: flex; gap: 32px; align-items: center;">
+                    <i class="fas fa-cubes" style="font-size: 48px; color: var(--neon-blue);"></i>
+                    <div>
+                        <h3>Immutable Security Audit Trail</h3>
+                        <p style="color: #64748b; font-size: 13px;">
+                            Every ransomware alert is hashed and linked to the previous block using SHA-256. 
+                            This prevents attackers from deleting logs to hide their activity.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="blockList" class="chain-container" style="padding-left: 40px; border-left: 1px dashed var(--glass-border);">
+                <!-- Blocks loaded via JS -->
+            </div>
+        </div>
+    </main>
+
+    <script>
+        async function loadChain() {
+            const resp = await fetch('/api/blockchain/chain');
+            const blocks = await resp.json();
+            
+            const container = document.getElementById('blockList');
+            container.innerHTML = blocks.reverse().map(b => `
+                <div class="block-card">
+                    <div class="block-header">
+                        <span style="color: #94a3b8; font-size: 12px;">BLOCK #${b.index}</span>
+                        <span style="color: #64748b; font-size: 11px;">${new Date(b.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <span style="display: block; font-size: 10px; color: #64748b; margin-bottom: 4px;">DATA PAYLOAD (ALERT HASH)</span>
+                        <div style="color: #e2e8f0; font-size: 13px; font-family: monospace; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px;">
+                            ${b.data}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 16px;">
+                        <div style="flex: 1;">
+                            <span style="display: block; font-size: 10px; color: #64748b; margin-bottom: 4px;">CURRENT HASH</span>
+                            <span class="hash-tag">${b.hash.substring(0, 32)}...</span>
+                        </div>
+                        <div style="flex: 1;">
+                            <span style="display: block; font-size: 10px; color: #64748b; margin-bottom: 4px;">PREVIOUS HASH</span>
+                            <span class="hash-tag" style="background: rgba(255,255,255,0.05); color: #94a3b8;">${b.previousHash.substring(0, 32)}...</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function verifyIntegrity() {
+            const resp = await fetch('/api/blockchain/verify');
+            const isValid = await resp.json();
+            const banner = document.getElementById('integrityBanner');
+            if(!isValid) {
+                banner.style.background = 'rgba(239, 68, 68, 0.1)';
+                banner.style.color = '#ef4444';
+                banner.style.borderColor = '#ef4444';
+                banner.innerHTML = '<i class="fas fa-exclamation-triangle"></i> LEDGER TAMPERED DETECTED!';
+            } else {
+                banner.style.background = 'rgba(16, 185, 129, 0.1)';
+                banner.style.color = '#10b981';
+                banner.style.borderColor = '#10b981';
+                banner.innerHTML = '<i class="fas fa-check-circle"></i> LEDGER INTEGRITY VERIFIED';
+            }
+        }
+
+        async function simulateTamper() {
+            if(confirm('This will manually corrupt block #1 to test the security verification. Proceed?')) {
+                await fetch('/api/blockchain/tamper', { method: 'POST' });
+                loadChain();
+                verifyIntegrity();
+            }
+        }
+
+        loadChain();
+        setInterval(verifyIntegrity, 3000);
+    </script>
+</body>
+</html>

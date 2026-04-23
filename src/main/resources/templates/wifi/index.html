@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Wi-Fi Signal Analyzer | CyberSec</title>
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div th:replace="~{dashboard/index :: sidebar}"></div>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1>Wi-Fi Spectrometer & Signal Analyzer</h1>
+            <span class="badge badge-online">PROMISCUOUS MODE ACTIVE</span>
+        </header>
+
+        <div class="dashboard-container">
+            <div class="grid-3">
+                <div class="card" style="grid-column: span 2;">
+                    <h3>Live Frequency Spectrum (2.4GHz / 5GHz)</h3>
+                    <canvas id="wifiChart" height="200"></canvas>
+                </div>
+                <div class="card">
+                    <h3>Nearby Access Points</h3>
+                    <div id="apList" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- JS Loaded -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 24px;">
+                <h3>Signal Strength (RSSI) Monitor</h3>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px;">
+                    <div class="glass-card" style="text-align: center;">
+                        <i class="fas fa-wifi" style="color: #10b981;"></i>
+                        <h4 style="margin: 8px 0;">Home_Office_5G</h4>
+                        <div style="font-size: 24px; font-weight: bold;">-42 dBm</div>
+                    </div>
+                    <div class="glass-card" style="text-align: center;">
+                        <i class="fas fa-wifi" style="color: #ba7517;"></i>
+                        <h4 style="margin: 8px 0;">Public_Guest_WiFi</h4>
+                        <div style="font-size: 24px; font-weight: bold;">-68 dBm</div>
+                    </div>
+                    <div class="glass-card" style="text-align: center; border-color: #ef4444;">
+                        <i class="fas fa-skull-crossbones" style="color: #ef4444;"></i>
+                        <h4 style="margin: 8px 0;">FREE_WIFI_FAST</h4>
+                        <div style="font-size: 24px; font-weight: bold; color: #ef4444;">ROGUE AP</div>
+                    </div>
+                    <div class="glass-card" style="text-align: center;">
+                        <i class="fas fa-wifi" style="color: #64748b;"></i>
+                        <h4 style="margin: 8px 0;">Hidden_SSID</h4>
+                        <div style="font-size: 24px; font-weight: bold;">-55 dBm</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const ctx = document.getElementById('wifiChart').getContext('2d');
+        const wifiChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Array.from({length: 14}, (_, i) => 'CH ' + (i + 1)),
+                datasets: [{
+                    label: 'Signal Intensity',
+                    data: Array.from({length: 14}, () => 0),
+                    backgroundColor: 'rgba(0, 210, 255, 0.4)',
+                    borderColor: '#00d2ff',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        max: 100,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#64748b' }
+                    },
+                    x: {
+                        ticks: { color: '#64748b' }
+                    }
+                },
+                plugins: { legend: { display: false } },
+                animation: { duration: 500 }
+            }
+        });
+
+        async function updateWifi() {
+            try {
+                // Fetch Spectrum Stats
+                const statsRes = await fetch('/api/wifi/stats');
+                const stats = await statsRes.json();
+                
+                wifiChart.data.datasets[0].data = stats.spectrum;
+                wifiChart.update();
+
+                // Fetch AP Scan
+                const scanRes = await fetch('/api/wifi/scan');
+                const aps = await scanRes.json();
+
+                document.getElementById('apList').innerHTML = aps.map(ap => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; border-left: 3px solid ${ap.rogue ? '#ef4444' : '#00d2ff'};">
+                        <div>
+                            <div style="color: #fff; font-size: 13px; font-weight: 600;">${ap.ssid || '<i>Hidden SSID</i>'}</div>
+                            <div style="font-size: 10px; color: #64748b;">${ap.bssid || 'N/A'} | ${ap.security} | CH ${ap.channel}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="color: ${ap.rogue ? '#ef4444' : '#10b981'}; font-weight: bold;">${ap.signal} dBm</div>
+                            ${ap.rogue ? '<div style="font-size: 8px; color: #ef4444; font-weight: 800;">ROGUE DETECTED</div>' : ''}
+                        </div>
+                    </div>
+                `).join('');
+
+                // Update signal monitor cards (top 4)
+                const monitorContainer = document.querySelector('.dashboard-container > .card[style*="margin-top: 24px"] > div');
+                if (monitorContainer) {
+                    monitorContainer.innerHTML = aps.slice(0, 4).map(ap => `
+                        <div class="glass-card" style="text-align: center; ${ap.rogue ? 'border-color: #ef4444;' : ''}">
+                            <i class="fas ${ap.rogue ? 'fa-skull-crossbones' : 'fa-wifi'}" style="color: ${ap.rogue ? '#ef4444' : '#10b981'};"></i>
+                            <h4 style="margin: 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ap.ssid || 'Hidden'}</h4>
+                            <div style="font-size: 24px; font-weight: bold; color: ${ap.rogue ? '#ef4444' : '#fff'};">${ap.rogue ? 'ROGUE' : ap.signal + ' dBm'}</div>
+                        </div>
+                    `).join('');
+                }
+
+            } catch (error) {
+                console.error("Failed to update Wi-Fi data:", error);
+            }
+        }
+
+        setInterval(updateWifi, 3000);
+        updateWifi();
+    </script>
+</body>
+</html>

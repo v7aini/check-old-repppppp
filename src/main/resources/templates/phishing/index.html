@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Phishing Simulation Lab | CyberSec</title>
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .campaign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px; margin-top: 24px; }
+        .stat-circle { width: 80px; height: 80px; border-radius: 50%; border: 4px solid var(--glass-border); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; margin: 0 auto 12px; }
+        .template-card { padding: 16px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid var(--glass-border); cursor: pointer; transition: 0.3s; }
+        .template-card:hover { border-color: var(--neon-blue); background: rgba(0,210,255,0.05); }
+        .template-card.active { border-color: var(--neon-blue); box-shadow: 0 0 15px rgba(0,210,255,0.2); }
+    </style>
+</head>
+<body>
+    <div th:replace="~{dashboard/index :: sidebar}"></div>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1>Phishing Simulation Lab</h1>
+            <p style="color: #64748b;">Conduct proactive awareness training and track vulnerability metrics.</p>
+        </header>
+
+        <div class="dashboard-container">
+            <!-- Create Campaign -->
+            <div class="card" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
+                <h3><i class="fas fa-paper-plane"></i> Launch New Simulation</h3>
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 40px; margin-top: 24px;">
+                    <div class="form-container">
+                        <div class="form-group">
+                            <label>Campaign Name</label>
+                            <input type="text" id="cName" placeholder="e.g. Q1 Security Audit" class="form-control">
+                        </div>
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label>Target Department</label>
+                            <select id="cTarget" class="form-control">
+                                <option>HR Department</option>
+                                <option>Finance Team</option>
+                                <option>Engineering</option>
+                                <option>Sales & Marketing</option>
+                            </select>
+                        </div>
+                        <button onclick="launchCampaign()" class="btn-primary" style="width: 100%; margin-top: 24px; padding: 14px;">DEPLOY SIMULATION</button>
+                    </div>
+                    
+                    <div class="template-selector">
+                        <label style="display: block; margin-bottom: 12px; font-size: 13px; color: #94a3b8;">Select Attack Template</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div class="template-card active" onclick="selectTemplate(this, 'Microsoft 365 Password Reset')">
+                                <i class="fab fa-microsoft" style="color: #00a4ef; font-size: 24px;"></i>
+                                <h4 style="margin: 12px 0 4px;">M365 Alert</h4>
+                                <p style="font-size: 11px; color: #64748b;">Urgent password reset required for your corporate account.</p>
+                            </div>
+                            <div class="template-card" onclick="selectTemplate(this, 'HR Policy Update - PDF')">
+                                <i class="fas fa-file-pdf" style="color: #ff4b2b; font-size: 24px;"></i>
+                                <h4 style="margin: 12px 0 4px;">HR Policy</h4>
+                                <p style="font-size: 11px; color: #64748b;">New employee benefit policy attached for review.</p>
+                            </div>
+                            <div class="template-card" onclick="selectTemplate(this, 'LinkedIn Connection Request')">
+                                <i class="fab fa-linkedin" style="color: #0077b5; font-size: 24px;"></i>
+                                <h4 style="margin: 12px 0 4px;">LinkedIn Ping</h4>
+                                <p style="font-size: 11px; color: #64748b;">You have 3 new messages from recruiters in your area.</p>
+                            </div>
+                            <div class="template-card" onclick="selectTemplate(this, 'Urgent Invoice Payment')">
+                                <i class="fas fa-file-invoice-dollar" style="color: #10b981; font-size: 24px;"></i>
+                                <h4 style="margin: 12px 0 4px;">Finance Dept</h4>
+                                <p style="font-size: 11px; color: #64748b;">Unpaid invoice #9402 detected for your project.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Campaigns -->
+            <h3 style="margin-top: 40px; color: #fff;"><i class="fas fa-chart-line"></i> Active Simulations</h3>
+            <div id="campaignList" class="campaign-grid">
+                <!-- Loaded via JS -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Email Preview Modal -->
+    <div id="emailModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="glass-card" style="width: 90%; max-width: 600px; background: #f8fafc; color: #1e293b; padding: 0; overflow: hidden;">
+            <div style="background: #e2e8f0; padding: 12px 20px; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between;">
+                <span style="font-weight: 600; font-size: 13px;">📧 Email Preview</span>
+                <button onclick="document.getElementById('emailModal').style.display='none'" style="border: none; background: transparent; cursor: pointer;">✕</button>
+            </div>
+            <div style="padding: 24px;">
+                <div style="margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
+                    <div style="font-size: 13px; margin-bottom: 4px;"><strong>From:</strong> <span id="emailFrom"></span></div>
+                    <div style="font-size: 13px;"><strong>Subject:</strong> <span id="emailSubject"></span></div>
+                </div>
+                <div id="emailBody" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; font-size: 14px;"></div>
+                <div style="margin-top: 32px; text-align: center;">
+                    <button class="btn-primary" style="background: #0078d4; border: none; padding: 10px 32px; border-radius: 4px;">Action Required</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedTemplate = 'Microsoft 365 Password Reset';
+
+        function selectTemplate(el, name) {
+            document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+            selectedTemplate = name;
+        }
+
+        async function launchCampaign() {
+            const name = document.getElementById('cName').value;
+            const target = document.getElementById('cTarget').value;
+            if(!name) return alert('Enter campaign name');
+
+            await fetch('/api/phishing/campaigns', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ name, target, template: selectedTemplate })
+            });
+            
+            document.getElementById('cName').value = '';
+            loadCampaigns();
+        }
+
+        async function loadCampaigns() {
+            const resp = await fetch('/api/phishing/campaigns');
+            const data = await resp.json();
+            
+            const container = document.getElementById('campaignList');
+            container.innerHTML = data.map(c => {
+                const clickRate = ((c.clickCount / c.sentCount) * 100).toFixed(1);
+                const compRate = ((c.compromisedCount / c.sentCount) * 100).toFixed(1);
+                
+                return `
+                    <div class="card" style="position: relative; overflow: hidden;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
+                            <div>
+                                <h4 style="color: #fff; margin: 0;">${c.name}</h4>
+                                <span style="font-size: 11px; color: #64748b;">Target: ${c.targetGroup}</span>
+                            </div>
+                            <span class="badge badge-online">ACTIVE</span>
+                        </div>
+                        
+                        <div style="display: flex; gap: 20px; text-align: center; margin-bottom: 24px;">
+                            <div style="flex: 1;">
+                                <div class="stat-circle" style="color: #00d2ff; border-color: rgba(0,210,255,0.2);">${c.sentCount}</div>
+                                <span style="font-size: 11px; color: #64748b;">Emails Sent</span>
+                            </div>
+                            <div style="flex: 1; cursor: pointer;" onclick="simulateClick('${c.id}')">
+                                <div class="stat-circle" style="color: #ba7517; border-color: rgba(186,117,23,0.2);">${c.clickCount}</div>
+                                <span style="font-size: 11px; color: #64748b;">Clicks (${clickRate}%)</span>
+                            </div>
+                            <div style="flex: 1;">
+                                <div class="stat-circle" style="color: #ff4b2b; border-color: rgba(255,75,43,0.2);">${c.compromisedCount}</div>
+                                <span style="font-size: 11px; color: #64748b;">Compromised (${compRate}%)</span>
+                            </div>
+                        </div>
+                        
+                        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; color: #94a3b8;">Template: ${c.template}</span>
+                            <button class="btn-sm" style="font-size: 10px; padding: 4px 8px;" onclick="previewEmail('${c.template}')">View Email</button>
+                        </div>
+                        
+                        <div style="position: absolute; bottom: 0; left: 0; width: ${clickRate}%; height: 3px; background: var(--neon-blue); transition: width 1s;"></div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function simulateClick(id) {
+            await fetch('/api/phishing/click/' + id, { method: 'POST' });
+            loadCampaigns();
+        }
+
+        function previewEmail(template) {
+            const modal = document.getElementById('emailModal');
+            const from = document.getElementById('emailFrom');
+            const subject = document.getElementById('emailSubject');
+            const body = document.getElementById('emailBody');
+
+            if(template.includes('Microsoft')) {
+                from.innerText = 'Microsoft Security Team <no-reply@microsoft-security-verify.com>';
+                subject.innerText = 'ACTION REQUIRED: Abnormal sign-in activity detected';
+                body.innerHTML = 'Dear User, <br><br>We detected a suspicious login attempt to your Microsoft 365 account from an unrecognized IP address in <strong>Moscow, RU</strong>.<br><br>If this was not you, please click the button below to verify your identity and secure your account immediately.';
+            } else if(template.includes('HR')) {
+                from.innerText = 'HR Department <hr-benefits@internal-portal-corp.net>';
+                subject.innerText = 'IMPORTANT: Updated Employee Benefits Guide 2026';
+                body.innerHTML = 'Hi Team, <br><br>Please find the updated benefits guide for the upcoming fiscal year. All employees are required to review the changes and sign the acknowledgement form by Friday.<br><br>Failure to comply may result in a delay in benefit processing.';
+            } else {
+                from.innerText = 'LinkedIn <notifications@linkedin-updates.com>';
+                subject.innerText = 'You have 3 new messages from recruiters';
+                body.innerHTML = 'You have new messages waiting for you on LinkedIn! Several recruiters from top tech firms are interested in your profile.<br><br>Click below to view your messages and reply.';
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        loadCampaigns();
+    </script>
+</body>
+</html>

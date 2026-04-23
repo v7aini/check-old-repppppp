@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title>WAF</title><link rel="stylesheet" th:href="@{/css/main.css}"></head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span>CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item active"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item"><a href="/tip">🌐 Threat Intel</a></li>
+    <li class="nav-item"><a href="/network">📡 Network</a></li>
+    <li class="nav-item"><a href="/investigate">🔎 Investigate</a></li>
+    <li class="nav-item"><a href="/swagger-ui.html" target="_blank">📖 API Docs</a></li>
+  </ul>
+  <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
+</nav>
+<main class="main-content">
+  <header class="page-header"><h1>Web Application Firewall</h1></header>
+  <section class="metrics-grid">
+    <div class="metric-card danger"><div class="metric-label">Blocks (24h)</div><div class="metric-value" th:text="${blocks24h}">0</div></div>
+    <div class="metric-card success"><div class="metric-label">WAF Status</div><div class="metric-value" style="font-size:16px;color:var(--success)">Active</div></div>
+    <div class="metric-card info"><div class="metric-label">Rate Limit</div><div class="metric-value" style="font-size:16px">100 req/min</div></div>
+    <div class="metric-card warning"><div class="metric-label">Security Headers</div><div class="metric-value" style="font-size:16px">4 active</div></div>
+  </section>
+  <div class="card">
+    <div class="card-header"><h3>Active WAF protections</h3></div>
+    <table class="data-table">
+      <thead><tr><th>Protection</th><th>Status</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>SQL Injection (SQLi)</td><td><span class="badge badge-success">Active</span></td><td>5 pattern rules — UNION SELECT, DROP TABLE, OR 1=1, SLEEP, EXEC</td></tr>
+        <tr><td>Cross-Site Scripting (XSS)</td><td><span class="badge badge-success">Active</span></td><td>4 pattern rules — script tags, event handlers, javascript: URIs</td></tr>
+        <tr><td>Local File Inclusion (LFI)</td><td><span class="badge badge-success">Active</span></td><td>3 pattern rules — path traversal, /etc/passwd, URL encoding</td></tr>
+        <tr><td>Command Injection</td><td><span class="badge badge-success">Active</span></td><td>2 pattern rules — shell operators, backtick execution</td></tr>
+        <tr><td>Scanner Detection</td><td><span class="badge badge-success">Active</span></td><td>Blocks sqlmap, nikto, masscan, nmap, burpsuite user-agents</td></tr>
+        <tr><td>Rate Limiting</td><td><span class="badge badge-success">Active</span></td><td>Token bucket — 100 req/min per IP</td></tr>
+        <tr><td>IP Blocklist</td><td><span class="badge badge-success">Active</span></td><td>DB-backed, auto-synced from TIP (score ≥ 80)</td></tr>
+        <tr><td>Security Response Headers</td><td><span class="badge badge-success">Active</span></td><td>X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, HSTS</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body></html>

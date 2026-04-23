@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="UTF-8"><title>TIP</title><link rel="stylesheet" th:href="@{/css/main.css}"></head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-brand"><span>🛡</span><span>CyberSec</span></div>
+  <ul class="nav-list">
+    <li class="nav-item"><a href="/dashboard">📊 Dashboard</a></li>
+    <li class="nav-item"><a href="/ids">🔍 IDS</a></li>
+    <li class="nav-item"><a href="/waf">🧱 WAF</a></li>
+    <li class="nav-item active"><a href="/tip">🌐 Threat Intel</a></li>
+  </ul>
+  <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
+</nav>
+<main class="main-content">
+  <header class="page-header"><h1>Threat Intelligence Platform</h1></header>
+  <section class="metrics-grid">
+    <div class="metric-card danger"><div class="metric-label">Active IOCs</div><div class="metric-value" th:text="${activeIocCount}">0</div></div>
+    <div class="metric-card info"><div class="metric-label">Last Feed Run</div><div class="metric-value" style="font-size:14px" th:text="${lastFeedRun != null ? #temporals.format(lastFeedRun,'HH:mm dd/MM') : 'Never'}">-</div></div>
+    <div class="metric-card success"><div class="metric-label">Last Ingested</div><div class="metric-value" th:text="${lastIngest}">0</div></div>
+    <div class="metric-card warning"><div class="metric-label">Auto-block</div><div class="metric-value" style="font-size:16px">Score ≥ 80</div></div>
+  </section>
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <h3>Feed management</h3>
+      <form th:action="@{/tip/feed/trigger}" method="post" style="display:inline">
+        <button type="submit" class="btn-primary" style="font-size:13px;padding:6px 16px">▶ Trigger Now</button>
+      </form>
+    </div>
+    <div style="padding:16px;font-size:13px;color:var(--text2)">
+      Feeds: <strong style="color:var(--text)">AlienVault OTX</strong> (set api key in application.properties) ·
+      <strong style="color:var(--text)">Mock Feed</strong> (auto-used when no key set) · Schedule: hourly.
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><h3>Top threat indicators</h3></div>
+    <table class="data-table">
+      <thead><tr><th>Type</th><th>Indicator</th><th>Score</th><th>Feed</th><th>Description</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr th:each="i : ${topThreats}">
+          <td><span class="badge badge-info" th:text="${i.indicatorType}">-</span></td>
+          <td><code th:text="${i.indicatorValue}">-</code></td>
+          <td>
+            <span th:text="${i.threatScore}">0</span>
+            <span th:if="${i.threatScore >= 80}" style="color:var(--danger)"> ⚠</span>
+          </td>
+          <td th:text="${i.sourceFeed}">-</td>
+          <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" th:text="${i.description}">-</td>
+          <td><span class="badge" th:classappend="${i.status.name()=='ACTIVE'?'badge-success':'badge-medium'}" th:text="${i.status}">-</span></td>
+        </tr>
+        <tr th:if="${topThreats.empty}"><td colspan="6" style="text-align:center;padding:24px;color:var(--text2)">No IOCs — click Trigger Now above</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body></html>

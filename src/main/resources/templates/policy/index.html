@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Security Policy Engine | CyberSec</title>
+    <link rel="stylesheet" th:href="@{/css/main.css}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div th:replace="~{dashboard/index :: sidebar}"></div>
+
+    <main class="main-content">
+        <header class="page-header">
+            <h1>Automated Security Policy Engine</h1>
+            <div style="display: flex; gap: 12px;">
+                <span class="badge badge-online">ORCHESTRATOR ONLINE</span>
+                <span class="badge" style="background: rgba(127, 119, 221, 0.1); color: #7f77dd; border: 1px solid #7f77dd;">ADAPTIVE MODE</span>
+            </div>
+        </header>
+
+        <div class="dashboard-container">
+            <div class="grid-3">
+                <div class="card" style="grid-column: span 2;">
+                    <h3><i class="fas fa-shield-halved"></i> Active Mitigation Rules</h3>
+                    <div style="margin-top: 16px;">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Rule Definition</th><th>Type</th><th>Trigger</th><th>Status</th></tr>
+                            </thead>
+                            <tbody id="ruleBody">
+                                <!-- Loaded via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Policy Configuration</h3>
+                    <div class="form-group">
+                        <label>Auto-Block Threshold</label>
+                        <input type="range" class="form-control" min="0" max="100" value="80">
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 4px;">
+                            <span>0.0</span><span style="color: var(--neon-blue);">0.80</span><span>1.0</span>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 20px;">
+                        <label>Block Duration (min)</label>
+                        <input type="number" class="form-control" value="60">
+                    </div>
+                    <div style="margin-top: 24px; padding: 16px; background: rgba(0,210,255,0.05); border-radius: 8px; font-size: 12px; color: #94a3b8;">
+                        <i class="fas fa-info-circle"></i> Adaptive mode automatically adjusts thresholds based on false-positive feedback loops.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        async function loadRules() {
+            const resp = await fetch('/api/policy/rules');
+            const rules = await resp.json();
+            
+            const container = document.getElementById('ruleBody');
+            if(rules.length === 0) {
+                container.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 40px; color: #64748b;">No active mitigation rules. System running in baseline mode.</td></tr>';
+                return;
+            }
+
+            container.innerHTML = rules.map(r => {
+                const isBlock = r.startsWith('BLOCK');
+                return `
+                    <tr>
+                        <td><code style="color: ${isBlock ? '#ef4444' : '#ba7517'}">${r}</code></td>
+                        <td>${isBlock ? 'Deny Traffic' : 'Log & Monitor'}</td>
+                        <td>ML Threat Detection</td>
+                        <td><span class="badge ${isBlock ? 'badge-danger' : 'badge-warning'}">ENFORCING</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function fetchRules() {
+            // Simplified for demo - we'll create a controller endpoint
+            const resp = await fetch('/api/policy/active');
+            const data = await resp.json();
+            const container = document.getElementById('ruleBody');
+            container.innerHTML = data.map(r => {
+                const isBlock = r.includes('BLOCK');
+                return `
+                    <tr>
+                        <td><code>${r}</code></td>
+                        <td>${isBlock ? 'Firewall DROP' : 'Heuristic WATCH'}</td>
+                        <td>ML Analytics</td>
+                        <td><span class="status-badge ${isBlock ? 'status-danger' : 'status-safe'}">ACTIVE</span></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Add dummy rules if empty for visual
+        setInterval(loadRules, 3000);
+        loadRules();
+    </script>
+</body>
+</html>

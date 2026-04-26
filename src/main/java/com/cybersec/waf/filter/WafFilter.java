@@ -69,6 +69,7 @@ public class WafFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         if (!enabled || isPublic(req.getRequestURI())) { chain.doFilter(req, res); return; }
         String ip  = ip(req);
+        if ("0:0:0:0:0:0:0:1".equals(ip) || "127.0.0.1".equals(ip)) { chain.doFilter(req, res); return; } // Never block localhost
         String ua  = req.getHeader("User-Agent");
         String rawTgt = req.getRequestURI() + "?" + (req.getQueryString() != null ? req.getQueryString() : "");
         String tgt;
@@ -110,6 +111,11 @@ public class WafFilter extends OncePerRequestFilter {
             || u.equals("/favicon.ico") || u.equals("/login") || u.startsWith("/h2-console")
             || u.startsWith("/ws/") || u.startsWith("/swagger-ui") || u.startsWith("/api-docs")
             || u.startsWith("/v3/api-docs") || u.equals("/api/auth/login")
-            || u.equals("/api/public/status");
+            || u.equals("/api/public/status")
+            || u.startsWith("/api/waf/unblock")
+            || u.startsWith("/api/ids/threat-summary")
+            || u.startsWith("/api/simulation/status")
+            || u.startsWith("/api/simulation/attacker/log");
     }
+
 }

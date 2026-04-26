@@ -30,28 +30,22 @@
             </div>
 
             <div class="card" style="margin-top: 24px;">
-                <h3>Signal Strength (RSSI) Monitor</h3>
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px;">
-                    <div class="glass-card" style="text-align: center;">
-                        <i class="fas fa-wifi" style="color: #10b981;"></i>
-                        <h4 style="margin: 8px 0;">Home_Office_5G</h4>
-                        <div style="font-size: 24px; font-weight: bold;">-42 dBm</div>
-                    </div>
-                    <div class="glass-card" style="text-align: center;">
-                        <i class="fas fa-wifi" style="color: #ba7517;"></i>
-                        <h4 style="margin: 8px 0;">Public_Guest_WiFi</h4>
-                        <div style="font-size: 24px; font-weight: bold;">-68 dBm</div>
-                    </div>
-                    <div class="glass-card" style="text-align: center; border-color: #ef4444;">
-                        <i class="fas fa-skull-crossbones" style="color: #ef4444;"></i>
-                        <h4 style="margin: 8px 0;">FREE_WIFI_FAST</h4>
-                        <div style="font-size: 24px; font-weight: bold; color: #ef4444;">ROGUE AP</div>
-                    </div>
-                    <div class="glass-card" style="text-align: center;">
-                        <i class="fas fa-wifi" style="color: #64748b;"></i>
-                        <h4 style="margin: 8px 0;">Hidden_SSID</h4>
-                        <div style="font-size: 24px; font-weight: bold;">-55 dBm</div>
-                    </div>
+                <h3>Connected Devices (LAN Clients)</h3>
+                <div class="table-container" style="margin-top: 16px; background: rgba(0,0,0,0.2); border-radius: 12px; overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead style="background: rgba(0,210,255,0.1); color: #00d2ff; font-size: 12px;">
+                            <tr>
+                                <th style="padding: 12px;">DEVICE / HOSTNAME</th>
+                                <th style="padding: 12px;">IP ADDRESS</th>
+                                <th style="padding: 12px;">MAC ADDRESS</th>
+                                <th style="padding: 12px;">MANUFACTURER</th>
+                                <th style="padding: 12px; text-align: center;">STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deviceList" style="color: #cbd5e1; font-size: 13px;">
+                            <!-- JS Loaded -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -115,9 +109,11 @@
                 `).join('');
 
                 // Update signal monitor cards (top 4)
-                const monitorContainer = document.querySelector('.dashboard-container > .card[style*="margin-top: 24px"] > div');
-                if (monitorContainer) {
-                    monitorContainer.innerHTML = aps.slice(0, 4).map(ap => `
+                const monitorContainer = document.querySelector('.dashboard-container > .card:nth-child(2) > div'); // Adjust selector if needed
+                // Actually the selector was a bit fragile, let's just find the monitor grid
+                const monitorGrid = document.querySelector('.glass-card')?.parentElement;
+                if (monitorGrid) {
+                    monitorGrid.innerHTML = aps.slice(0, 4).map(ap => `
                         <div class="glass-card" style="text-align: center; ${ap.rogue ? 'border-color: #ef4444;' : ''}">
                             <i class="fas ${ap.rogue ? 'fa-skull-crossbones' : 'fa-wifi'}" style="color: ${ap.rogue ? '#ef4444' : '#10b981'};"></i>
                             <h4 style="margin: 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ap.ssid || 'Hidden'}</h4>
@@ -125,6 +121,28 @@
                         </div>
                     `).join('');
                 }
+
+                // Fetch Connected Devices
+                const devicesRes = await fetch('/api/wifi/devices');
+                const devices = await devicesRes.json();
+
+                document.getElementById('deviceList').innerHTML = devices.map(dev => `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding: 12px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fas ${dev.self ? 'fa-laptop-code' : 'fa-mobile-alt'}" style="color: ${dev.self ? '#00d2ff' : '#64748b'};"></i>
+                                <span>${dev.hostname} ${dev.self ? '<span class="badge" style="font-size: 9px; background: #00d2ff; color: #000; padding: 2px 4px;">THIS DEVICE</span>' : ''}</span>
+                            </div>
+                        </td>
+                        <td style="padding: 12px; font-family: monospace;">${dev.ipAddress}</td>
+                        <td style="padding: 12px; font-family: monospace; color: #64748b;">${dev.macAddress}</td>
+                        <td style="padding: 12px;">${dev.manufacturer}</td>
+                        <td style="padding: 12px; text-align: center;">
+                            <span style="height: 8px; width: 8px; background: #10b981; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #10b981;"></span>
+                            <span style="font-size: 10px; color: #10b981; margin-left: 5px;">ACTIVE</span>
+                        </td>
+                    </tr>
+                `).join('');
 
             } catch (error) {
                 console.error("Failed to update Wi-Fi data:", error);

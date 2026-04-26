@@ -38,6 +38,8 @@ public class SecurityConfig {
                     "/api/public/**",
                     "/api/auth/login",
                     "/ws/**",
+                    "/api/ids/threat-summary",
+                    "/api/simulation/**",
                     // Swagger UI — open for easy access
                     "/swagger-ui.html", "/swagger-ui/**", "/api-docs/**", "/v3/api-docs/**"
                 ).permitAll()

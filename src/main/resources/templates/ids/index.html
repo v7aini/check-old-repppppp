@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head><meta charset="UTF-8"><title>IDS</title><link rel="stylesheet" th:href="@{/css/main.css}">
-<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 <nav class="sidebar">
@@ -19,18 +18,100 @@
   <div class="sidebar-footer"><a href="/logout" class="logout-btn">Sign out</a></div>
 </nav>
 <main class="main-content">
-  <header class="page-header"><h1>Intrusion Detection System</h1><span id="ws" class="status-dot connecting">● Connecting...</span></header>
+  <header class="page-header">
+    <h1>Intrusion Detection System</h1>
+    <div style="display:flex; align-items:center; gap:20px;">
+        <span id="ws" class="status-dot connecting">● Connecting...</span>
+    </div>
+  </header>
+
   <section class="metrics-grid">
     <div class="metric-card danger"><div class="metric-label">Critical</div><div class="metric-value" th:text="${criticalCount}">0</div></div>
     <div class="metric-card warning"><div class="metric-label">High</div><div class="metric-value" th:text="${highCount}">0</div></div>
     <div class="metric-card info"><div class="metric-label">Active Rules</div><div class="metric-value" th:text="${allRules.size()}">0</div></div>
     <div class="metric-card success"><div class="metric-label">Open Alerts</div><div class="metric-value" id="open-cnt" th:text="${openAlerts.size()}">0</div></div>
   </section>
-  <div style="display:flex;gap:8px;margin-bottom:16px">
-    <button class="btn-sm" onclick="show('alerts',this)">Open Alerts</button>
-    <button class="btn-sm" onclick="show('rules',this)">Signature Rules</button>
+
+  <div class="card" style="margin-bottom: 16px;">
+    <div class="card-header"><h3>Simulation & AI Controls</h3></div>
+    <div class="card-body" style="display:flex; gap:16px; padding: 16px; flex-wrap: wrap;">
+        <div class="control-group">
+            <label>IDS Simulation:</label>
+            <button id="btn-ids-start" class="btn-sm success" onclick="controlSim('ids', 'start')">Start</button>
+            <button id="btn-ids-stop" class="btn-sm danger" onclick="controlSim('ids', 'stop')">Stop</button>
+        </div>
+        <div class="control-group">
+            <label>Malicious Device:</label>
+            <button id="btn-dev-start" class="btn-sm success" onclick="controlSim('device', 'start')">Deploy</button>
+            <button id="btn-dev-stop" class="btn-sm danger" onclick="controlSim('device', 'stop')">Stop</button>
+        </div>
+        <div class="control-group">
+            <label>ML Auto-Blocking:</label>
+            <label class="switch">
+                <input type="checkbox" id="ml-toggle" onchange="toggleMl(this.checked)" checked>
+                <span class="slider round"></span>
+            </label>
+        </div>
+        <div id="bandwidth-info" style="margin-left: auto; color: var(--text2); font-size: 14px; align-self: center;">
+            Device Traffic: <span id="bandwidth-val">0</span> MB/s
+        </div>
+    </div>
   </div>
-  <div id="tab-alerts" class="card">
+
+  <!-- ===== VIRTUAL ATTACKER PANEL ===== -->
+  <div class="card" style="margin-bottom: 16px; border: 1px solid rgba(239,68,68,0.3);">
+    <div class="card-header" style="display:flex;align-items:center;gap:10px">
+      <h3 style="margin:0">⚔️ Virtual Attacker</h3>
+      <span id="attacker-status" class="badge" style="background:#64748b;font-size:10px">IDLE</span>
+    </div>
+    <div class="card-body" style="padding:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;margin-bottom:16px">
+        <div>
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">ATTACKER IP</label>
+          <input id="attacker-ip" type="text" value="10.66.6.100" style="width:100%;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);color:#fff;border-radius:6px;font-family:monospace">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">ATTACK TYPE</label>
+          <select id="attack-type" style="width:100%;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);color:#fff;border-radius:6px">
+            <option value="SQL_INJECTION">💉 SQL Injection</option>
+            <option value="XSS">🕷️ XSS</option>
+            <option value="BRUTE_FORCE">🔐 Brute Force</option>
+            <option value="PATH_TRAVERSAL">📁 Path Traversal</option>
+            <option value="COMMAND_INJECTION">💻 Command Injection</option>
+            <option value="DDOS_FLOOD">🌊 DDoS Flood</option>
+            <option value="LOG4SHELL">☢️ Log4Shell</option>
+            <option value="UNAUTHORIZED_API">🚫 Unauthorized API</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-sm" onclick="fireSingleAttack()" style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;flex:1;cursor:pointer;font-weight:700">🎯 Fire</button>
+          <button id="btn-atk-start" class="btn-sm" onclick="startAttacker()" style="background:#ef4444;color:#fff;border:none;flex:1;cursor:pointer;font-weight:700">⚔️ Continuous</button>
+          <button id="btn-atk-stop" class="btn-sm" onclick="stopAttacker()" style="background:var(--bg2);color:var(--text2);border:1px solid var(--border);flex:1;cursor:pointer" disabled>■ Stop</button>
+        </div>
+      </div>
+
+      <!-- Live Attack Log -->
+      <div style="background:rgba(0,0,0,0.3);border-radius:8px;overflow:hidden;max-height:250px;overflow-y:auto" id="attack-log-container">
+        <table class="data-table" style="margin:0;font-size:12px">
+          <thead style="position:sticky;top:0;background:rgba(0,0,0,0.9);z-index:1"><tr>
+            <th>Time</th><th>Type</th><th>URI</th><th>Classification</th><th>Confidence</th><th>Action</th>
+          </tr></thead>
+          <tbody id="attack-log-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text2)">No attacks fired yet. Use the controls above to launch attacks.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="btn-tab active" onclick="show('alerts',this)">Open Alerts</button>
+    <button class="btn-tab" onclick="show('rules',this)">Signature Rules</button>
+    <button class="btn-tab" onclick="show('stats',this)">Attack Statistics</button>
+    <button class="btn-tab" onclick="show('ai',this)" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;border-color:#6366f1">🤖 AI Threat Intel</button>
+  </div>
+
+  <div id="tab-alerts" class="tab-content card">
     <div class="card-header"><h3>Open alerts</h3><span class="badge badge-danger">Live</span></div>
     <table class="data-table">
       <thead><tr><th>ID</th><th>Time</th><th>Source IP</th><th>Type</th><th>Severity</th><th>Score</th><th>Module</th><th>Action</th></tr></thead>
@@ -49,7 +130,8 @@
       </tbody>
     </table>
   </div>
-  <div id="tab-rules" class="card" style="display:none">
+
+  <div id="tab-rules" class="tab-content card" style="display:none">
     <div class="card-header"><h3>Signature rules</h3></div>
     <table class="data-table">
       <thead><tr><th>ID</th><th>Rule name</th><th>Type</th><th>Severity</th><th>Pattern preview</th><th>Status</th></tr></thead>
@@ -65,24 +147,334 @@
       </tbody>
     </table>
   </div>
+
+  <div id="tab-stats" class="tab-content card" style="display:none">
+    <div class="card-header">
+        <h3>Threat Analytics</h3>
+        <select id="stats-period" onchange="loadStats()" class="btn-sm" style="background: var(--bg2); color: white; border: 1px solid var(--border);">
+            <option value="7">Last 7 Days</option>
+            <option value="14">Last 14 Days</option>
+            <option value="30">Last 30 Days</option>
+        </select>
+    </div>
+    <div class="card-body" style="padding: 20px;">
+        <canvas id="threatChart" style="max-height: 400px;"></canvas>
+    </div>
+  </div>
+
+  <!-- ===== AI THREAT INTELLIGENCE TAB ===== -->
+  <div id="tab-ai" class="tab-content card" style="display:none">
+    <div class="card-header" style="display:flex;align-items:center;gap:12px">
+      <h3 style="margin:0">🤖 AI Security Assistant — Threat Intelligence</h3>
+      <span class="badge" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:10px">REALTIME</span>
+      <button class="btn-sm" onclick="loadAiSummary()" style="margin-left:auto;background:var(--bg2);color:var(--text2);border:1px solid var(--border);cursor:pointer">↻ Refresh</button>
+    </div>
+    <div class="card-body" style="padding:20px">
+
+      <!-- KPI Row -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:24px" id="ai-kpis">
+        <div class="ai-kpi"><div class="ai-kpi-label">Total Classified (24h)</div><div class="ai-kpi-value" id="ai-total">—</div></div>
+        <div class="ai-kpi safe"><div class="ai-kpi-label">Safe</div><div class="ai-kpi-value" id="ai-safe">—</div></div>
+        <div class="ai-kpi suspicious"><div class="ai-kpi-label">Suspicious</div><div class="ai-kpi-value" id="ai-suspicious">—</div></div>
+        <div class="ai-kpi malicious"><div class="ai-kpi-label">Blocked / Malicious</div><div class="ai-kpi-value" id="ai-malicious">—</div></div>
+        <div class="ai-kpi patterns"><div class="ai-kpi-label">Learned Patterns</div><div class="ai-kpi-value" id="ai-patterns">—</div></div>
+      </div>
+
+      <!-- Charts Row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+        <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px">
+          <h4 style="color:var(--text2);margin:0 0 16px 0;font-size:13px;text-transform:uppercase;letter-spacing:1px">Classification Distribution</h4>
+          <canvas id="aiDonutChart" height="220"></canvas>
+        </div>
+        <div style="background:rgba(0,0,0,0.2);border-radius:12px;padding:20px">
+          <h4 style="color:var(--text2);margin:0 0 16px 0;font-size:13px;text-transform:uppercase;letter-spacing:1px">Top Attack Types</h4>
+          <canvas id="aiBarChart" height="220"></canvas>
+        </div>
+      </div>
+
+      <!-- Learned Patterns Table -->
+      <div style="background:rgba(0,0,0,0.2);border-radius:12px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">🧠</span>
+          <h4 style="margin:0;color:#e2e8f0;font-size:14px">ML-Learned Attack Patterns</h4>
+          <span class="badge" style="background:#6366f1;color:#fff;font-size:9px;margin-left:auto" id="ai-pattern-count">0 patterns</span>
+        </div>
+        <table class="data-table" style="margin:0">
+          <thead><tr>
+            <th>ID</th><th>Attack Type</th><th>Threat Level</th><th>Hit Count</th><th>Avg Score</th><th>Last Seen</th><th>Auto-Block</th>
+          </tr></thead>
+          <tbody id="ai-pattern-tbody">
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text2)">Loading patterns...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
 </main>
+
+<style>
+.btn-tab { padding: 8px 16px; background: var(--bg2); border: 1px solid var(--border); color: var(--text2); cursor: pointer; border-radius: 4px; transition: 0.2s; }
+.btn-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+.control-group { display: flex; align-items: center; gap: 8px; border-right: 1px solid var(--border); padding-right: 16px; }
+.control-group:last-child { border-right: none; }
+.btn-sm.success { background: #28a745; color: white; border: none; }
+.btn-sm.danger { background: #dc3545; color: white; border: none; }
+.switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: var(--primary); }
+input:checked + .slider:before { transform: translateX(20px); }
+
+/* AI Threat Intel KPI Cards */
+.ai-kpi { background: rgba(0,0,0,0.25); border-radius: 10px; padding: 16px 20px; border-left: 3px solid #64748b; }
+.ai-kpi.safe { border-left-color: #10b981; }
+.ai-kpi.suspicious { border-left-color: #f59e0b; }
+.ai-kpi.malicious { border-left-color: #ef4444; }
+.ai-kpi.patterns { border-left-color: #6366f1; }
+.ai-kpi-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.ai-kpi-value { font-size: 28px; font-weight: 700; color: #e2e8f0; }
+.ai-kpi.safe .ai-kpi-value { color: #10b981; }
+.ai-kpi.suspicious .ai-kpi-value { color: #f59e0b; }
+.ai-kpi.malicious .ai-kpi-value { color: #ef4444; }
+.ai-kpi.patterns .ai-kpi-value { color: #a78bfa; }
+@keyframes ai-pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+.ai-kpi-value { animation: ai-pulse 2s ease-in-out infinite; }
+</style>
+
 <script>
-function show(n,b){
-  document.getElementById('tab-alerts').style.display=n==='alerts'?'block':'none';
-  document.getElementById('tab-rules').style.display=n==='rules'?'block':'none';
+let chart = null;
+
+function show(n, b) {
+  document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+  document.querySelectorAll('.btn-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + n).style.display = 'block';
+  b.classList.add('active');
+  if (n === 'stats') loadStats();
+  if (n === 'ai') loadAiSummary();
 }
-const sc=Stomp.over(new SockJS('/ws')); sc.debug=null;
-sc.connect({},function(){
-  document.getElementById('ws').textContent='● Live'; document.getElementById('ws').className='status-dot connected';
-  sc.subscribe('/topic/ids-alerts',function(m){
-    const a=JSON.parse(m.body);
-    const tr=document.createElement('tr'); tr.className='new-alert';
-    tr.innerHTML='<td>'+a.id+'</td><td>'+new Date(a.timestamp).toLocaleTimeString()+'</td><td><code>'+a.sourceIp+'</code></td><td>'+a.attackType+'</td><td><span class="badge badge-'+a.severity.toLowerCase()+'">'+a.severity+'</span></td><td>'+a.score+'</td><td>'+a.detectedBy+'</td><td><a href="/ids/alert/'+a.id+'" class="btn-link">Investigate →</a></td>';
-    const tbody=document.getElementById('alert-tbody');
-    tbody.insertBefore(tr,tbody.firstChild);
-    document.getElementById('open-cnt').textContent=parseInt(document.getElementById('open-cnt').textContent)+1;
-    setTimeout(()=>tr.classList.remove('new-alert'),2000);
+
+async function loadStats() {
+    const days = document.getElementById('stats-period').value;
+    const res = await fetch('/api/analytics/trends?days=' + days);
+    const data = await res.json();
+    
+    const ctx = document.getElementById('threatChart').getContext('2d');
+    if (chart) chart.destroy();
+    
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Attacks Detected',
+                data: data.attacks,
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: true,
+                tension: 0.4
+            }, {
+                label: 'Threats Defended',
+                data: data.defended,
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#aaa' } },
+                x: { grid: { display: false }, ticks: { color: '#aaa' } }
+            },
+            plugins: {
+                legend: { labels: { color: '#eee' } }
+            }
+        }
+    });
+}
+
+async function controlSim(type, action) {
+    await fetch(`/api/simulation/${type}/${action}`, { method: 'POST' });
+    updateStatus();
+}
+
+async function toggleMl(enabled) {
+    await fetch(`/api/simulation/ml/toggle?enabled=${enabled}`, { method: 'POST' });
+}
+
+async function updateStatus() {
+    const res = await fetch('/api/simulation/status');
+    const data = await res.json();
+    
+    document.getElementById('btn-ids-start').disabled = data.idsRunning;
+    document.getElementById('btn-ids-stop').disabled = !data.idsRunning;
+    document.getElementById('btn-dev-start').disabled = data.deviceRunning;
+    document.getElementById('btn-dev-stop').disabled = !data.deviceRunning;
+    document.getElementById('ml-toggle').checked = data.mlEnabled;
+    document.getElementById('bandwidth-val').textContent = (data.deviceBandwidth / 1024 / 1024).toFixed(1);
+
+    // Virtual Attacker status
+    const atkStatus = document.getElementById('attacker-status');
+    const btnStart = document.getElementById('btn-atk-start');
+    const btnStop = document.getElementById('btn-atk-stop');
+    if (data.attackerActive) {
+        atkStatus.textContent = '⚔️ ATTACKING (' + data.attackerIp + ')';
+        atkStatus.style.background = '#ef4444';
+        btnStart.disabled = true; btnStop.disabled = false;
+    } else {
+        atkStatus.textContent = 'IDLE';
+        atkStatus.style.background = '#64748b';
+        btnStart.disabled = false; btnStop.disabled = true;
+    }
+}
+
+// ========= VIRTUAL ATTACKER FUNCTIONS =========
+
+async function fireSingleAttack() {
+    const type = document.getElementById('attack-type').value;
+    const ip = document.getElementById('attacker-ip').value;
+    await fetch(`/api/simulation/attacker/fire?type=${type}&ip=${encodeURIComponent(ip)}`, { method: 'POST' });
+    refreshAttackLog();
+}
+
+async function startAttacker() {
+    const ip = document.getElementById('attacker-ip').value;
+    await fetch(`/api/simulation/attacker/start?ip=${encodeURIComponent(ip)}&name=Dashboard+Attacker&intervalMs=2000`, { method: 'POST' });
+    updateStatus();
+    startLogPolling();
+}
+
+async function stopAttacker() {
+    await fetch('/api/simulation/attacker/stop', { method: 'POST' });
+    updateStatus();
+    stopLogPolling();
+}
+
+let logPollId = null;
+function startLogPolling() { if (!logPollId) logPollId = setInterval(refreshAttackLog, 2000); }
+function stopLogPolling() { if (logPollId) { clearInterval(logPollId); logPollId = null; } }
+
+async function refreshAttackLog() {
+    try {
+        const res = await fetch('/api/simulation/attacker/log');
+        const log = await res.json();
+        const tbody = document.getElementById('attack-log-tbody');
+        if (log.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text2)">No attacks fired yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = log.slice().reverse().map(e => {
+            const classColor = e.classification === 'MALICIOUS' ? '#ef4444' : e.classification === 'SUSPICIOUS' ? '#f59e0b' : '#10b981';
+            const actionColor = e.action === 'BLOCKED' ? '#ef4444' : e.action === 'RATE_LIMITED' ? '#f59e0b' : e.action === 'ALERT_ONLY' ? '#6366f1' : '#10b981';
+            return `<tr>
+                <td style="white-space:nowrap">${new Date(e.timestamp).toLocaleTimeString()}</td>
+                <td style="font-weight:600">${e.attackType}</td>
+                <td style="font-family:monospace;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">${e.uri}</td>
+                <td><span class="badge" style="background:${classColor};color:#fff;font-size:9px">${e.classification}</span></td>
+                <td style="font-weight:bold;color:${classColor}">${e.confidence}</td>
+                <td><span class="badge" style="background:${actionColor};color:#fff;font-size:9px">${e.action}</span></td>
+            </tr>`;
+        }).join('');
+        // Auto-scroll to top
+        document.getElementById('attack-log-container').scrollTop = 0;
+    } catch(e) { console.error('Attack log refresh failed:', e); }
+}
+
+setInterval(updateStatus, 3000);
+updateStatus();
+
+const sc = Stomp.over(new SockJS('/ws')); sc.debug = null;
+sc.connect({}, function() {
+  document.getElementById('ws').textContent = '● Live'; document.getElementById('ws').className = 'status-dot connected';
+  sc.subscribe('/topic/ids-alerts', function(m) {
+    const a = JSON.parse(m.body);
+    const tr = document.createElement('tr'); tr.className = 'new-alert';
+    tr.innerHTML = '<td>' + a.id + '</td><td>' + new Date(a.timestamp).toLocaleTimeString() + '</td><td><code>' + a.sourceIp + '</code></td><td>' + a.attackType + '</td><td><span class="badge badge-' + a.severity.toLowerCase() + '">' + a.severity + '</span></td><td>' + a.score + '</td><td>' + a.detectedBy + '</td><td><a href="/ids/alert/' + a.id + '" class="btn-link">Investigate →</a></td>';
+    const tbody = document.getElementById('alert-tbody');
+    tbody.insertBefore(tr, tbody.firstChild);
+    document.getElementById('open-cnt').textContent = parseInt(document.getElementById('open-cnt').textContent) + 1;
+    setTimeout(() => tr.classList.remove('new-alert'), 2000);
   });
 });
+
+// ====== AI THREAT INTELLIGENCE ======
+let aiDonutChart = null, aiBarChart = null;
+
+async function loadAiSummary() {
+  try {
+    const res = await fetch('/api/ids/threat-summary');
+    const d = await res.json();
+
+    // KPI values
+    document.getElementById('ai-total').textContent = d.totalClassifications24h || 0;
+    document.getElementById('ai-safe').textContent = d.totalSafe || 0;
+    document.getElementById('ai-suspicious').textContent = d.totalSuspicious || 0;
+    document.getElementById('ai-malicious').textContent = d.totalBlocked || 0;
+    document.getElementById('ai-patterns').textContent = d.totalKnownPatterns || 0;
+
+    // Donut chart – classification breakdown
+    const cb = d.classificationBreakdown || {};
+    const donutCtx = document.getElementById('aiDonutChart').getContext('2d');
+    if (aiDonutChart) aiDonutChart.destroy();
+    aiDonutChart = new Chart(donutCtx, {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(cb),
+        datasets: [{ data: Object.values(cb), backgroundColor: ['#10b981','#f59e0b','#ef4444','#6366f1','#64748b'], borderWidth: 0 }]
+      },
+      options: { cutout: '65%', responsive: true, plugins: { legend: { labels: { color: '#ccc', font: { size: 12 } } } } }
+    });
+
+    // Bar chart – top attack types
+    const ta = d.topAttackTypes || {};
+    const barCtx = document.getElementById('aiBarChart').getContext('2d');
+    if (aiBarChart) aiBarChart.destroy();
+    aiBarChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: Object.keys(ta),
+        datasets: [{ label: 'Detections', data: Object.values(ta), backgroundColor: 'rgba(99,102,241,0.6)', borderColor: '#6366f1', borderWidth: 1, borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true,
+        scales: { x: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#aaa' } }, y: { ticks: { color: '#ccc', font: { size: 11 } } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // Patterns table
+    const patterns = d.topLearnedPatterns || [];
+    document.getElementById('ai-pattern-count').textContent = patterns.length + ' patterns';
+    const tbody = document.getElementById('ai-pattern-tbody');
+    if (patterns.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text2)">No patterns learned yet. The model will learn from detected threats.</td></tr>';
+    } else {
+      tbody.innerHTML = patterns.map(p => {
+        const levelColor = p.threatLevel === 'MALICIOUS' ? '#ef4444' : p.threatLevel === 'SUSPICIOUS' ? '#f59e0b' : '#10b981';
+        return `<tr>
+          <td>${p.id}</td>
+          <td style="font-weight:600">${p.attackType}</td>
+          <td><span class="badge" style="background:${levelColor};color:#fff;font-size:10px">${p.threatLevel}</span></td>
+          <td style="font-weight:bold">${p.hitCount}</td>
+          <td>${p.avgScore}</td>
+          <td style="font-size:12px;color:var(--text2)">${new Date(p.lastSeen).toLocaleString()}</td>
+          <td>${p.autoBlock ? '<span style="color:#ef4444;font-weight:700">⛔ YES</span>' : '<span style="color:var(--text2)">No</span>'}</td>
+        </tr>`;
+      }).join('');
+    }
+  } catch(e) { console.error('AI Summary fetch failed:', e); }
+}
+
+// Auto-refresh AI summary every 30s if on the AI tab
+setInterval(() => {
+    if (document.getElementById('tab-ai').style.display === 'block') {
+        loadAiSummary();
+    }
+}, 30000);
 </script>
 </body></html>

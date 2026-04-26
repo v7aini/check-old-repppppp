@@ -1,10 +1,14 @@
 package com.cybersec.ids.controller;
 
 import com.cybersec.ids.model.Alert;
+import com.cybersec.ids.model.AttackPattern;
+import com.cybersec.ids.repository.AttackPatternRepository;
 import com.cybersec.ids.service.AlertService;
+import com.cybersec.ids.service.ThreatClassificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,9 +20,17 @@ import java.util.*;
 public class IdsApiController {
 
     private final AlertService alertService;
+    private final ThreatClassificationService classificationService;
+    private final AttackPatternRepository patternRepo;
 
     @Autowired
-    public IdsApiController(AlertService alertService) { this.alertService = alertService; }
+    public IdsApiController(AlertService alertService,
+                            @Lazy ThreatClassificationService classificationService,
+                            AttackPatternRepository patternRepo) {
+        this.alertService = alertService;
+        this.classificationService = classificationService;
+        this.patternRepo = patternRepo;
+    }
 
     @GetMapping("/alerts")
     @Operation(summary = "Get recent alerts", description = "Returns latest N alerts. Default limit=50, max=500")
@@ -81,4 +93,27 @@ public class IdsApiController {
     public ResponseEntity<Map<String,Object>> reportTraffic(@RequestBody Map<String,String> p) {
         return ResponseEntity.ok(Map.of("received", true, "ip", p.getOrDefault("ip","unknown")));
     }
+
+    // ====================================================================
+    //  AI SECURITY ASSISTANT ENDPOINTS
+    // ====================================================================
+
+    @GetMapping("/threat-summary")
+    @Operation(summary = "Real-time AI threat summary", description = "Returns classification breakdown, top attack types, learned patterns, and totals for the last 24 hours")
+    public ResponseEntity<Map<String, Object>> threatSummary() {
+        return ResponseEntity.ok(classificationService.getThreatSummary());
+    }
+
+    @GetMapping("/patterns")
+    @Operation(summary = "List known attack patterns", description = "Returns all attack patterns learned by the AI model")
+    public ResponseEntity<List<AttackPattern>> patterns() {
+        return ResponseEntity.ok(patternRepo.findTopPatterns());
+    }
+
+    @GetMapping("/patterns/malicious")
+    @Operation(summary = "List malicious patterns only")
+    public ResponseEntity<List<AttackPattern>> maliciousPatterns() {
+        return ResponseEntity.ok(patternRepo.findByThreatLevel(AttackPattern.ThreatLevel.MALICIOUS));
+    }
 }
+

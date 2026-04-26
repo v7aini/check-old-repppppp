@@ -1,6 +1,7 @@
 package com.cybersec.wifi.controller;
 
 import com.cybersec.wifi.model.WifiNetwork;
+import com.cybersec.wifi.model.ConnectedDevice;
 import com.cybersec.wifi.service.WifiService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,5 +40,11 @@ public class WifiApiController {
         response.put("spectrum", wifiService.getFrequencyStats());
         response.put("totalAPs", wifiService.scanNetworks().size());
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/devices")
+    @Operation(summary = "Get list of devices connected to current network")
+    public ResponseEntity<List<ConnectedDevice>> getDevices() {
+        return ResponseEntity.ok(wifiService.getConnectedDevices());
     }
 }

@@ -15,6 +15,10 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
     List<Alert> findTopNByOrderByDetectedAtDesc(@Param("n") int n);
     List<Alert> findByStatusOrderByDetectedAtDesc(AlertStatus status);
     List<Alert> findBySourceIpOrderByDetectedAtDesc(String sourceIp);
+    
+    @org.springframework.transaction.annotation.Transactional
+    void deleteBySourceIp(String sourceIp);
+    
     List<Alert> findByDetectedAtAfter(LocalDateTime since);
     long countByDetectedAtAfter(LocalDateTime since);
     long countBySeverity(Severity severity);

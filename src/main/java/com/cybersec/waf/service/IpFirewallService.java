@@ -18,6 +18,7 @@ public class IpFirewallService {
     public boolean isBlocked(String ip) { return repo.findActiveByIp(ip).isPresent(); }
 
     public void blockIp(String ip, String reason, LocalDateTime expiry) {
+        if ("0:0:0:0:0:0:0:1".equals(ip) || "127.0.0.1".equals(ip)) return; // Never block localhost
         if (isBlocked(ip)) return;
         IpBlockEntry e = IpBlockEntry.builder().ipAddress(ip).reason(reason)
                 .blockedAt(LocalDateTime.now()).expiresAt(expiry).active(true).build();

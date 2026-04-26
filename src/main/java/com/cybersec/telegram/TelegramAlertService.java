@@ -72,14 +72,19 @@ public class TelegramAlertService {
                 ? alert.getDetail().substring(0, 200) + "..."
                 : alert.getDetail();
 
+        String safeDetail = escapeMarkdown(detail);
+        String safeType = escapeMarkdown(alert.getAttackType());
+        String safeIp = escapeMarkdown(alert.getSourceIp());
+        String safeBy = escapeMarkdown(alert.getDetectedBy() != null ? alert.getDetectedBy() : "UNKNOWN");
+
         String message = emoji + " *CYBERSEC ALERT — " + alert.getSeverity().name() + "*\n\n"
-                + "📋 *Type:* `" + alert.getAttackType() + "`\n"
-                + "🌐 *Source IP:* `" + alert.getSourceIp() + "`\n"
-                + "🔍 *Detected by:* " + (alert.getDetectedBy() != null ? alert.getDetectedBy() : "UNKNOWN") + "\n"
-                + "📊 *Threat Score:* " + (alert.getThreatScore() != null ? alert.getThreatScore() : 0) + "/100\n"
-                + "⏰ *Time:* " + alert.getDetectedAt().format(FMT) + "\n"
-                + "📝 *Detail:* " + detail + "\n\n"
-                + "🔗 View: http://localhost:9090/ids/alert/" + alert.getId();
+                + "Type: " + safeType + "\n"
+                + "Source IP: " + safeIp + "\n"
+                + "Detected by: " + safeBy + "\n"
+                + "Threat Score: " + (alert.getThreatScore() != null ? alert.getThreatScore() : 0) + "/100\n"
+                + "Time: " + alert.getDetectedAt().format(FMT) + "\n"
+                + "Detail: " + safeDetail + "\n\n"
+                + "View: http://localhost:9090/ids/alert/" + alert.getId();
         sendMessage(message);
     }
 
@@ -149,6 +154,31 @@ public class TelegramAlertService {
         } catch (Exception e) {
             return severity == Alert.Severity.HIGH || severity == Alert.Severity.CRITICAL;
         }
+    }
+
+    /** Escape special Markdown characters that break Telegram's parser */
+    private String escapeMarkdown(String text) {
+        if (text == null) return "";
+        return text
+            .replace("\\", "\\\\")
+            .replace("*", "\\*")
+            .replace("_", "\\_")
+            .replace("`", "\\`")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+            .replace("(", "\\(")
+            .replace(")", "\\)")
+            .replace("~", "\\~")
+            .replace(">", "\\>")
+            .replace("#", "\\#")
+            .replace("+", "\\+")
+            .replace("-", "\\-")
+            .replace("=", "\\=")
+            .replace("|", "\\|")
+            .replace("{", "\\{")
+            .replace("}", "\\}")
+            .replace(".", "\\.")
+            .replace("!", "\\!");
     }
 
     public boolean isEnabled()  { return enabled; }

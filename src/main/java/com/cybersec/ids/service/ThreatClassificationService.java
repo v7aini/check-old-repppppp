@@ -359,9 +359,6 @@ public class ThreatClassificationService {
         return summary;
     }
 
-    public void clearFailedLogins(String ip) {
-        failedLoginCounts.remove(ip);
-    }
 
     // ====================================================================
     //  BRUTE FORCE TRACKING
